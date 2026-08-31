@@ -29,6 +29,42 @@ module.exports = async (req, res) => {
   }
 
   try {
+    // Login de quem já tem cadastro: só email + senha.
+    if ((req.body || {}).modo === 'login') {
+      const emailLogin = String(req.body.email || '').trim().toLowerCase();
+      const senhaLogin = String(req.body.senha || '');
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(emailLogin)) {
+        res.status(400).json({ error: 'Email inválido.' });
+        return;
+      }
+      if (!senhaLogin) {
+        res.status(400).json({ error: 'Digite a senha.' });
+        return;
+      }
+
+      const { data: contas, error: loginErr } = await supabase
+        .from('cadastros_acesso')
+        .select('nome, cpf, setor, senha_hash')
+        .eq('email', emailLogin);
+      if (loginErr) throw loginErr;
+
+      const conta = (contas || []).find((c) => verifyPassword(senhaLogin, c.senha_hash));
+      if (!conta) {
+        // pequeno atraso proposital, dificulta tentativa por força bruta
+        await new Promise((r) => setTimeout(r, 400));
+        res.status(401).json({ error: 'Email ou senha incorretos. Se esqueceu a senha, procure a TI.' });
+        return;
+      }
+
+      await supabase
+        .from('cadastros_acesso')
+        .update({ ultimo_acesso: new Date().toISOString() })
+        .eq('cpf', conta.cpf);
+
+      res.status(200).json({ ok: true, nome: conta.nome, cpf: conta.cpf, setor: conta.setor });
+      return;
+    }
+
     const { nome, email, cpf, senha, setor, aceiteTermos } = req.body || {};
 
     const cpfLimpo = String(cpf || '').replace(/\D/g, '');
