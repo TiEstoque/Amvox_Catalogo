@@ -1,11 +1,14 @@
 // api/catalog/[id].js
-// PATCH  /api/catalog/:id   -> edita um item (Painel Administrativo)
-// DELETE /api/catalog/:id   -> remove um item (soft delete: marca ativo=false, nada se perde)
+// PATCH  /api/catalog/:id   -> edita um item (Painel Administrativo — exige login)
+// DELETE /api/catalog/:id   -> remove um item (Painel Administrativo — exige login; soft delete)
 
 import { getSupabase } from '../_supabase.js';
+import { requireAdmin } from '../_admin.js';
 
 export default async function handler(req, res) {
   try {
+    if (!requireAdmin(req, res)) return;
+
     const supabase = getSupabase();
     const { id } = req.query;
     if (!id) return res.status(400).json({ error: 'Parâmetro "id" ausente.' });
