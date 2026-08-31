@@ -180,7 +180,7 @@
     font-size:14px;color:var(--ink-soft);cursor:pointer;border-bottom:2px solid transparent;}
   .subtab-btn.active{color:var(--primary);border-bottom-color:var(--accent);}
 
-  .dp-summary{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:20px;}
+  .dp-summary{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:20px;}
   @media(max-width:900px){.dp-summary{grid-template-columns:repeat(2,1fr);}}
   .dp-stat{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px;}
   .dp-stat .n{font-family:'Space Grotesk';font-weight:700;font-size:23px;}
@@ -887,6 +887,7 @@ async function baixarResumoAdmin(protocolo){
 function statusBadge(status){
   const map = {
     'Aguardando pagamento Pix': ['badge-pix','Aguardando pagamento Pix'],
+    'Pix informado': ['badge-dp','Pix informado'],
     'Aprovado automaticamente': ['badge-ok','Aprovado'],
     'Aguardando avaliação do DP': ['badge-dp','Aguardando avaliação do DP'],
     'Aprovado pelo DP': ['badge-ok','Aprovado pelo DP'],
@@ -922,11 +923,48 @@ async function renderMeusChamados(){
         <div class="meta">${esc(c.pagamento)}${c.parcelas ? ' · '+c.parcelas+'x de '+brl(c.valorParcela) : ''} · ${new Date(c.dataAbertura).toLocaleDateString('pt-BR')}</div>
         <div class="items-list">${c.itens.map(it=>`Nº ${esc(it.numero)} — ${esc(it.titulo)} (${it.quantidade}x)`).join(' · ')}</div>
         <div style="margin-top:8px;" class="val">Total: ${brl(c.valorTotal)}</div>
+        ${c.status==='Aguardando pagamento Pix' ? `<div style="margin-top:10px;"><button class="btn btn-primary btn-sm" onclick="informarPix('${c.protocolo}','${esc(c.matricula||'')}')">Já fiz o Pix ✓</button></div>` : ''}
+        ${c.status==='Pix informado' ? `<div style="margin-top:8px;font-size:12px;color:var(--ink-soft);">Pagamento informado — aguardando confirmação da TI.</div>` : ''}
+        ${c.status==='Concluído' && c.pagamento==='Pix' ? `<div style="margin-top:10px;"><button class="btn btn-outline btn-sm" onclick="baixarNotaDebitoAssociado('${c.protocolo}','${esc(c.matricula||'')}', this)">Baixar Nota de Débito</button></div>` : ''}
       </div>
     `).join('');
   } catch(err){
     console.error('Erro ao buscar chamados', err);
     showToast('Não foi possível buscar seus chamados agora. Tente de novo.');
+  }
+}
+
+async function informarPix(protocolo, matricula){
+  if(!confirm('Confirmar que você já fez o Pix deste chamado?')) return;
+  try{
+    const res = await fetch('/api/reservas/' + encodeURIComponent(protocolo), {
+      method: 'PATCH', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ status: 'Pix informado', matricula })
+    });
+    const data = await res.json();
+    if(!res.ok) throw new Error(data.error || 'Não foi possível registrar o pagamento.');
+    showToast('Pagamento informado! A TI vai confirmar e concluir a venda.');
+    renderMeusChamados();
+  } catch(err){
+    console.error('Erro ao informar pagamento Pix', err);
+    showToast(err.message || 'Não foi possível registrar agora. Tente de novo.');
+  }
+}
+
+async function baixarNotaDebitoAssociado(protocolo, matricula, btnEl){
+  const original = btnEl.textContent;
+  btnEl.textContent = 'Buscando...';
+  btnEl.disabled = true;
+  try{
+    const res = await fetch('/api/notas-debito?protocolo=' + encodeURIComponent(protocolo) + '&matricula=' + encodeURIComponent(matricula));
+    const data = await res.json();
+    if(!res.ok) throw new Error(data.error || 'Nota de Débito não encontrada.');
+    window.open(data.url, '_blank');
+  } catch(err){
+    showToast(err.message || 'Não foi possível baixar a Nota de Débito.');
+  } finally {
+    btnEl.textContent = original;
+    btnEl.disabled = false;
   }
 }
 
@@ -987,6 +1025,7 @@ async function renderDP(){
   const counts = {
     'Todos': list.length,
     'Aguardando avaliação do DP': list.filter(c=>c.status==='Aguardando avaliação do DP').length,
+    'Pix informado': list.filter(c=>c.status==='Pix informado').length,
     'Reservado (ativo)': list.filter(active).length,
     'Concluído': list.filter(c=>c.status==='Concluído').length,
     'Cancelado / Reprovado': list.filter(c=>['Cancelado','Reprovado pelo DP'].includes(c.status)).length,
@@ -994,11 +1033,12 @@ async function renderDP(){
   document.getElementById('dpSummary').innerHTML = `
     <div class="dp-stat"><div class="n">${counts['Todos']}</div><div class="l">Total de chamados</div></div>
     <div class="dp-stat"><div class="n" style="color:var(--warning);">${counts['Aguardando avaliação do DP']}</div><div class="l">Aguardando DP</div></div>
+    <div class="dp-stat"><div class="n" style="color:var(--accent);">${counts['Pix informado']}</div><div class="l">Pix informado</div></div>
     <div class="dp-stat"><div class="n" style="color:var(--primary);">${counts['Reservado (ativo)']}</div><div class="l">Reservas ativas</div></div>
     <div class="dp-stat"><div class="n" style="color:#5B3FA0;">${counts['Concluído']}</div><div class="l">Concluídos</div></div>
     <div class="dp-stat"><div class="n" style="color:var(--danger);">${counts['Cancelado / Reprovado']}</div><div class="l">Cancelados / Reprovados</div></div>
   `;
-  const chips = ['Aguardando avaliação do DP','Reservado (ativo)','Todos','Concluído','Cancelado / Reprovado'];
+  const chips = ['Aguardando avaliação do DP','Pix informado','Reservado (ativo)','Todos','Concluído','Cancelado / Reprovado'];
   document.getElementById('dpFilterChips').innerHTML = chips.map(c=>`<button class="chip ${c===dpFilter?'active':''}" data-f="${esc(c)}">${esc(c)} (${counts[c]})</button>`).join('');
   document.querySelectorAll('#dpFilterChips .chip').forEach(ch=>{ ch.addEventListener('click', ()=>{ dpFilter = ch.dataset.f; renderDP(); }); });
 

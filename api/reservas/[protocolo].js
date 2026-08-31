@@ -10,8 +10,6 @@ const ALLOWED_STATUS = ['Aprovado pelo DP', 'Reprovado pelo DP', 'Concluído', '
 
 export default async function handler(req, res) {
   try {
-    if (!requireAdmin(req, res)) return;
-
     const supabase = getSupabase();
     const { protocolo } = req.query;
     if (!protocolo) return res.status(400).json({ error: 'Parâmetro "protocolo" ausente.' });
@@ -23,6 +21,37 @@ export default async function handler(req, res) {
 
     const body = parseBody(req);
     const { status, observacaoDP } = body;
+
+    // Associado avisando que fez o Pix — não exige login de admin, mas só
+    // funciona com o CPF do próprio chamado e a partir do status certo.
+    if (status === 'Pix informado') {
+      const cpfInformado = String(body.matricula || '').replace(/\D/g, '');
+      if (!cpfInformado) return res.status(400).json({ error: 'Informe o CPF usado na reserva.' });
+
+      const { data: chamadoPix, error: pixErr } = await supabase
+        .from('chamados')
+        .select('protocolo, status, matricula')
+        .eq('protocolo', protocolo)
+        .single();
+      if (pixErr || !chamadoPix) return res.status(404).json({ error: 'Chamado não encontrado.' });
+      if (String(chamadoPix.matricula || '').replace(/\D/g, '') !== cpfInformado) {
+        return res.status(403).json({ error: 'CPF não confere com o desse chamado.' });
+      }
+      if (chamadoPix.status !== 'Aguardando pagamento Pix') {
+        return res.status(409).json({ error: 'Esse chamado não está aguardando pagamento Pix.' });
+      }
+
+      const { error: pixUpdErr } = await supabase
+        .from('chamados')
+        .update({ status: 'Pix informado' })
+        .eq('protocolo', protocolo);
+      if (pixUpdErr) throw pixUpdErr;
+
+      return res.status(200).json({ protocolo, status: 'Pix informado' });
+    }
+
+    if (!requireAdmin(req, res)) return;
+
     if (!ALLOWED_STATUS.includes(status)) {
       return res.status(400).json({ error: 'Status inválido.' });
     }
