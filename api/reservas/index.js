@@ -215,6 +215,7 @@ function shapeChamado(c, itens, descricaoPorItemId = {}) {
     valorParcela: c.valor_parcela !== null ? Number(c.valor_parcela) : null,
     status: c.status,
     observacaoDP: c.observacao_dp,
+    temComprovante: !!c.comprovante_path,
     dataAbertura: c.data_abertura,
     itens: itens.map((it) => ({
       itemId: it.item_id,
