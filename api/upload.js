@@ -3,6 +3,7 @@
 // (bucket "produtos"), devolvendo a URL pública pra salvar no item.
 
 import { getSupabase } from './_supabase.js';
+import { requireAdmin } from './_admin.js';
 
 export const config = {
   api: {
@@ -18,6 +19,8 @@ export default async function handler(req, res) {
       res.setHeader('Allow', 'POST');
       return res.status(405).json({ error: 'Método não permitido.' });
     }
+
+    if (!requireAdmin(req, res)) return;
 
     const supabase = getSupabase();
     const body = parseBody(req);
