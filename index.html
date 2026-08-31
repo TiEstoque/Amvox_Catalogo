@@ -1,0 +1,1253 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Amvox · Catálogo de Vendas Internas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<style>
+  :root{
+    --ink:#14202B; --ink-soft:#4B5B68;
+    --primary:#7A0209; --primary-deep:#1A1A1A; --primary-mid:#A31621;
+    --accent:#9E010E; --accent-deep:#6B000C;
+    --success:#2F7D5A; --success-bg:#E7F4ED;
+    --warning:#B45309; --warning-bg:#FDF1E2;
+    --danger:#B42318; --danger-bg:#FCEBE9;
+    --bg:#F1F5F8; --surface:#FFFFFF; --line:#E1E8EE; --tag-bg:#FCEDEE; --radius:14px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{background:var(--bg);color:var(--ink);font-family:'IBM Plex Sans',system-ui,sans-serif;-webkit-font-smoothing:antialiased;min-height:100vh;}
+  h1,h2,h3,.display{font-family:'Space Grotesk',system-ui,sans-serif;letter-spacing:-0.01em;}
+  .mono{font-family:'IBM Plex Mono',monospace;}
+  a{color:inherit;}
+
+  .topbar{background:linear-gradient(135deg,var(--primary-deep),var(--primary));color:#fff;padding:20px clamp(16px,4vw,40px);
+    display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;position:sticky;top:0;z-index:40;
+    box-shadow:0 2px 14px rgba(18,48,73,.18);}
+  .brand{display:flex;align-items:center;gap:12px;}
+  .brand-mark{width:40px;height:40px;border-radius:10px;background:var(--accent);display:flex;align-items:center;justify-content:center;
+    font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:17px;color:#ffffff;flex-shrink:0;}
+  .brand-text .name{font-family:'Space Grotesk';font-weight:700;font-size:19px;line-height:1.1;}
+  .brand-text .sub{font-size:12px;color:#EFC7CA;letter-spacing:.02em;}
+  .tabs{display:flex;gap:4px;background:rgba(255,255,255,.1);padding:4px;border-radius:11px;}
+  .tab-btn{border:none;background:transparent;color:#DCE9F3;padding:9px 16px;border-radius:8px;
+    font-family:'IBM Plex Sans';font-weight:600;font-size:13.5px;cursor:pointer;transition:.15s;white-space:nowrap;}
+  .tab-btn:hover{background:rgba(255,255,255,.08);}
+  .tab-btn.active{background:#fff;color:var(--primary-deep);}
+
+  .wrap{max-width:1180px;margin:0 auto;padding:28px clamp(16px,4vw,40px) 110px;}
+  .hidden{display:none !important;}
+
+  .info-strip{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:18px 22px;margin-bottom:24px;
+    display:grid;grid-template-columns:repeat(3,1fr);gap:20px;}
+  @media(max-width:760px){.info-strip{grid-template-columns:1fr;}}
+  .info-item{display:flex;gap:12px;align-items:flex-start;}
+  .info-icon{width:34px;height:34px;border-radius:9px;background:var(--tag-bg);border:1px solid #F0C7CB;display:flex;
+    align-items:center;justify-content:center;flex-shrink:0;font-size:16px;}
+  .info-item h3{font-size:13.5px;margin:0 0 3px;font-weight:600;}
+  .info-item p{font-size:12.5px;color:var(--ink-soft);margin:0;line-height:1.45;}
+
+  .cat-header{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:16px;}
+  .cat-header h1{font-size:26px;margin:0 0 4px;}
+  .cat-header p{margin:0;color:var(--ink-soft);font-size:13.5px;}
+  .controls{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px;}
+  .search-box{flex:1;min-width:220px;position:relative;}
+  .search-box input{width:100%;padding:11px 14px 11px 38px;border-radius:10px;border:1px solid var(--line);
+    font-family:'IBM Plex Sans';font-size:14px;background:#fff;color:var(--ink);}
+  .search-box input:focus{outline:2px solid var(--primary-mid);outline-offset:1px;}
+  .search-box::before{content:"⌕";position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--ink-soft);font-size:16px;}
+  .chip-row{display:flex;gap:8px;flex-wrap:wrap;}
+  .chip{border:1px solid var(--line);background:#fff;color:var(--ink-soft);padding:9px 15px;border-radius:999px;font-size:13px;
+    font-weight:600;cursor:pointer;transition:.15s;}
+  .chip:hover{border-color:var(--primary-mid);color:var(--primary);}
+  .chip.active{background:var(--primary);border-color:var(--primary);color:#fff;}
+
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(255px,1fr));gap:16px;}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:18px;display:flex;
+    flex-direction:column;gap:10px;transition:.18s;position:relative;overflow:hidden;}
+  .card:hover{transform:translateY(-2px);box-shadow:0 10px 24px rgba(18,48,73,.09);border-color:#CBD9E4;}
+  .card.in-cart{border-color:var(--accent);box-shadow:0 0 0 2px rgba(201,138,44,.18);}
+  .card.unavailable{opacity:.55;}
+  .card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;}
+  .card-photo{width:100%;height:130px;border-radius:10px;object-fit:cover;background:#F1EFE8;margin-bottom:2px;}
+  .card-photo-placeholder{width:100%;height:130px;border-radius:10px;background:#F8F5F2;border:1px dashed var(--line);
+    display:flex;align-items:center;justify-content:center;color:var(--ink-soft);font-size:11px;margin-bottom:2px;}
+  .tag{font-family:'IBM Plex Mono';font-size:11.5px;font-weight:600;color:var(--accent-deep);background:var(--tag-bg);
+    border:1px dashed #E5A3AA;border-radius:6px;padding:4px 8px;display:inline-block;transform:rotate(-1.2deg);white-space:nowrap;}
+  .cat-pill{font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--primary-mid);}
+  .card h3{font-size:15.5px;margin:0;line-height:1.3;}
+  .card .desc{font-size:12.8px;color:var(--ink-soft);line-height:1.5;flex:1;min-height:34px;}
+  .card-bottom{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:4px;}
+  .price{font-family:'Space Grotesk';font-weight:700;font-size:19px;color:var(--primary-deep);}
+  .price small{font-family:'IBM Plex Sans';font-weight:500;font-size:11px;color:var(--ink-soft);}
+  .btn{border:none;border-radius:9px;padding:10px 16px;font-family:'IBM Plex Sans';font-weight:600;font-size:13.5px;
+    cursor:pointer;transition:.15s;}
+  .btn-primary{background:var(--accent);color:#3A2809;}
+  .btn-primary:hover{background:var(--accent-deep);color:#fff;}
+  .btn-outline{background:transparent;border:1px solid var(--line);color:var(--ink);}
+  .btn-outline:hover{border-color:var(--primary-mid);color:var(--primary);}
+  .btn-danger-outline{background:transparent;border:1px solid #EFC9C4;color:var(--danger);}
+  .btn-danger-outline:hover{background:var(--danger-bg);}
+  .btn-success{background:var(--success);color:#fff;}
+  .btn-sm{padding:7px 12px;font-size:12.5px;}
+  .btn:disabled{opacity:.4;cursor:not-allowed;}
+  .empty{text-align:center;padding:60px 20px;color:var(--ink-soft);}
+  .empty .big{font-size:34px;margin-bottom:8px;}
+
+  .stepper{display:flex;align-items:center;gap:9px;background:#F3F6F8;border:1px solid var(--line);border-radius:9px;padding:4px;}
+  .step-btn{width:26px;height:26px;border-radius:7px;border:none;background:#fff;border:1px solid var(--line);
+    font-size:15px;font-weight:700;cursor:pointer;color:var(--primary);line-height:1;}
+  .step-btn:disabled{opacity:.35;cursor:not-allowed;}
+  .step-val{min-width:16px;text-align:center;font-weight:700;font-size:13.5px;}
+  .badge-status{font-size:10.5px;font-weight:700;padding:4px 9px;border-radius:999px;text-transform:uppercase;letter-spacing:.02em;}
+  .badge-condicao{font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:999px;display:inline-block;margin-top:2px;}
+  .bc-defeito{background:var(--warning-bg);color:var(--warning);}
+  .bc-novo{background:var(--success-bg);color:var(--success);}
+  .bs-reservado{background:var(--warning-bg);color:var(--warning);}
+  .bs-vendido{background:var(--danger-bg);color:var(--danger);}
+
+  /* floating cart bar */
+  .cart-bar{position:fixed;left:50%;bottom:22px;transform:translateX(-50%) translateY(120%);
+    background:var(--primary-deep);color:#fff;border-radius:14px;padding:14px 16px 14px 22px;display:flex;align-items:center;
+    gap:18px;box-shadow:0 16px 40px rgba(10,26,40,.35);z-index:60;transition:transform .25s ease;max-width:92vw;}
+  .cart-bar.show{transform:translateX(-50%) translateY(0);}
+  .cart-bar .ct{font-size:13.5px;}
+  .cart-bar .ct b{font-family:'Space Grotesk';font-size:15px;}
+  .cart-bar .btn-primary{white-space:nowrap;}
+
+  /* modal */
+  .overlay{position:fixed;inset:0;background:rgba(15,26,36,.5);display:flex;align-items:flex-start;justify-content:center;
+    padding:5vh 16px;z-index:100;overflow-y:auto;}
+  .modal{background:#fff;border-radius:16px;max-width:560px;width:100%;padding:0;overflow:hidden;box-shadow:0 30px 60px rgba(10,26,40,.35);}
+  .modal-head{background:linear-gradient(135deg,var(--primary-deep),var(--primary));color:#fff;padding:20px 24px;}
+  .modal-head h2{font-size:19px;margin:2px 0 0;}
+  .modal-body{padding:22px 24px;display:flex;flex-direction:column;gap:16px;max-height:66vh;overflow-y:auto;}
+  .cart-line{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line);font-size:13px;}
+  .cart-line:last-child{border-bottom:none;}
+  .cart-line .l1{font-weight:600;}
+  .cart-line .l2{color:var(--ink-soft);font-size:11.5px;}
+  .cart-total{display:flex;justify-content:space-between;align-items:center;padding-top:8px;font-weight:700;font-size:16px;font-family:'Space Grotesk';}
+  .field label{font-size:12.5px;font-weight:600;color:var(--ink-soft);display:block;margin-bottom:6px;}
+  .field input[type=text],.field input[type=number],.field select,.field textarea{
+    width:100%;padding:10px 12px;border-radius:9px;border:1px solid var(--line);font-family:'IBM Plex Sans';font-size:14px;}
+  .field textarea{resize:vertical;min-height:44px;}
+  .field input:focus,.field select:focus,.field textarea:focus{outline:2px solid var(--primary-mid);outline-offset:1px;}
+  .radio-group{display:flex;gap:10px;}
+  .radio-opt{flex:1;border:1px solid var(--line);border-radius:10px;padding:12px;cursor:pointer;transition:.15s;display:flex;flex-direction:column;gap:2px;}
+  .radio-opt:hover{border-color:var(--primary-mid);}
+  .radio-opt.sel{border-color:var(--primary);background:#FCEDEE;}
+  .radio-opt .t{font-weight:600;font-size:13.5px;}
+  .radio-opt .s{font-size:11.5px;color:var(--ink-soft);}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .sim-box{border-radius:10px;padding:13px 14px;font-size:12.8px;line-height:1.6;border:1px solid var(--line);}
+  .sim-box b{font-family:'IBM Plex Mono';}
+  .sim-ok{background:var(--success-bg);border-color:#BFE1CD;color:#1D5C3F;}
+  .sim-warn{background:var(--warning-bg);border-color:#F1D3AA;color:#8A4A0C;}
+  .modal-foot{padding:16px 24px 22px;display:flex;gap:10px;justify-content:flex-end;border-top:1px solid var(--line);}
+  .confirm-icon{width:52px;height:52px;border-radius:50%;background:var(--success-bg);color:var(--success);
+    display:flex;align-items:center;justify-content:center;font-size:26px;margin:4px auto 6px;}
+  .protocol{font-family:'IBM Plex Mono';font-weight:600;font-size:17px;background:var(--tag-bg);
+    border:1px dashed #E5A3AA;border-radius:8px;padding:10px 14px;text-align:center;color:var(--accent-deep);}
+
+  .badge{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:700;padding:5px 11px;border-radius:999px;}
+  .badge-pix{background:#E7EEF7;color:var(--primary);}
+  .badge-ok{background:var(--success-bg);color:var(--success);}
+  .badge-dp{background:var(--warning-bg);color:var(--warning);}
+  .badge-rep{background:var(--danger-bg);color:var(--danger);}
+  .badge-done{background:#E9E4F7;color:#5B3FA0;}
+  .badge::before{content:"●";font-size:8px;}
+
+  .lookup{display:flex;gap:10px;max-width:420px;margin-bottom:22px;}
+  .lookup input{flex:1;padding:11px 14px;border-radius:10px;border:1px solid var(--line);font-family:'IBM Plex Sans';font-size:14px;}
+  .ticket{background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin-bottom:10px;}
+  .ticket-top{display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;align-items:center;margin-bottom:8px;}
+  .ticket .meta{font-size:12px;color:var(--ink-soft);}
+  .ticket .items-list{font-size:12.8px;color:var(--ink-soft);margin-top:4px;}
+  .ticket .val{font-family:'Space Grotesk';font-weight:700;}
+
+  .gate{max-width:400px;margin:60px auto;background:#fff;border:1px solid var(--line);border-radius:16px;padding:30px;text-align:center;}
+  .gate h2{margin-top:6px;}
+  .gate p{color:var(--ink-soft);font-size:13px;}
+  .gate input{width:100%;padding:11px 14px;border-radius:10px;border:1px solid var(--line);margin:14px 0;text-align:center;
+    font-family:'IBM Plex Mono';font-size:15px;}
+
+  .subtabs{display:flex;gap:6px;margin-bottom:20px;border-bottom:1px solid var(--line);}
+  .subtab-btn{border:none;background:transparent;padding:11px 4px;margin-right:18px;font-family:'IBM Plex Sans';font-weight:600;
+    font-size:14px;color:var(--ink-soft);cursor:pointer;border-bottom:2px solid transparent;}
+  .subtab-btn.active{color:var(--primary);border-bottom-color:var(--accent);}
+
+  .dp-summary{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:20px;}
+  @media(max-width:900px){.dp-summary{grid-template-columns:repeat(2,1fr);}}
+  .dp-stat{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px;}
+  .dp-stat .n{font-family:'Space Grotesk';font-weight:700;font-size:23px;}
+  .dp-stat .l{font-size:10.8px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;letter-spacing:.03em;}
+  .dp-row{background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin-bottom:10px;}
+  .dp-row-top{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:8px;}
+  .dp-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;font-size:12.5px;margin:10px 0;}
+  @media(max-width:760px){.dp-grid{grid-template-columns:repeat(2,1fr);}}
+  .dp-grid div span{display:block;color:var(--ink-soft);font-size:11px;margin-bottom:2px;}
+  .dp-items{font-size:12.5px;background:#F8FAFC;border-radius:9px;padding:9px 12px;margin:8px 0;}
+  .dp-actions{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;}
+  textarea.obs{width:100%;border:1px solid var(--line);border-radius:9px;padding:9px 11px;font-family:'IBM Plex Sans';font-size:13px;resize:vertical;min-height:44px;}
+
+  .panel-head{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:18px;}
+  .form-card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:22px 24px;margin-bottom:26px;}
+  .form-card h2{font-size:17px;margin:0 0 4px;}
+  .form-card>p{color:var(--ink-soft);font-size:12.8px;margin:0 0 16px;}
+  .form-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:14px;}
+  @media(max-width:760px){.form-grid{grid-template-columns:1fr 1fr;}}
+  .form-grid .span2{grid-column:span 2;}
+  .form-grid .span3{grid-column:1/-1;}
+  .manage-row{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px 18px;margin-bottom:10px;
+    display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;}
+  .manage-row .info{display:flex;flex-direction:column;gap:3px;min-width:220px;flex:1;}
+  .manage-row .info .t1{font-weight:600;font-size:14px;}
+  .manage-row .info .t2{font-size:12px;color:var(--ink-soft);}
+  .manage-row .actions{display:flex;gap:8px;}
+  .badge-custom{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--accent-deep);
+    background:var(--tag-bg);border:1px solid #F0C7CB;padding:2px 8px;border-radius:999px;margin-left:8px;}
+  .edit-box{background:#F8FAFC;border:1px solid var(--line);border-radius:10px;padding:14px;margin-top:10px;width:100%;}
+
+  .toast{position:fixed;bottom:26px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--primary-deep);
+    color:#fff;padding:13px 20px;border-radius:11px;font-size:13.5px;font-weight:500;box-shadow:0 12px 30px rgba(10,26,40,.3);
+    opacity:0;transition:.25s;z-index:200;max-width:90vw;text-align:center;}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+  ::-webkit-scrollbar{width:10px;}
+  ::-webkit-scrollbar-thumb{background:#C6D3DD;border-radius:6px;}
+
+  .entry-gate-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;
+    background:linear-gradient(135deg,var(--primary-deep),var(--primary));padding:32px 16px;}
+  .entry-gate-card{background:#fff;border-radius:20px;padding:40px 36px 32px;max-width:400px;width:100%;
+    box-shadow:0 30px 70px rgba(10,26,40,.35);text-align:center;}
+  .entry-gate-logo{height:34px;margin-bottom:22px;}
+  .entry-gate-card h2{font-size:20px;margin:0 0 8px;}
+  .entry-gate-card>p{color:var(--ink-soft);font-size:13px;line-height:1.55;margin:0 0 24px;}
+  .entry-gate-card .field{text-align:left;margin-bottom:14px;}
+  .entry-gate-card .field label{font-size:12px;font-weight:600;color:var(--ink-soft);display:block;margin-bottom:6px;}
+  .entry-gate-card .field input{width:100%;padding:11px 13px;border-radius:10px;border:1px solid var(--line);
+    font-family:'IBM Plex Sans';font-size:14px;color:var(--ink);}
+  .entry-gate-card .field input:focus{outline:2px solid var(--primary-mid);outline-offset:1px;}
+  .entry-gate-card .btn-primary{width:100%;padding:12px 0;font-size:14.5px;margin-top:6px;}
+  .entry-gate-note{display:flex;align-items:center;gap:6px;justify-content:center;color:var(--ink-soft);
+    font-size:11.5px;margin-top:18px !important;}
+</style>
+</head>
+<body>
+
+<div id="entryGate" class="entry-gate-wrap">
+  <div class="entry-gate-card">
+    <img class="entry-gate-logo" src="data:image/jpeg;base64,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" alt="Amvox">
+    <h2>Bem-vindo(a)</h2>
+    <p>Antes de acessar o catálogo de vendas internas, confirme seus dados abaixo.</p>
+    <div class="field"><label>Nome completo</label><input type="text" id="gNome" placeholder="Seu nome completo"></div>
+    <div class="field"><label>Email</label><input type="email" id="gEmail" placeholder="seuemail@amvox.com.br"></div>
+    <div class="field"><label>CPF</label><input type="text" id="gCpf" placeholder="000.000.000-00"></div>
+    <label style="display:flex;align-items:flex-start;gap:8px;text-align:left;font-size:12.5px;color:var(--ink-soft);margin:4px 0 18px;cursor:pointer;">
+      <input type="checkbox" id="gAceite" style="margin-top:2px;flex-shrink:0;">
+      <span>Li e estou de acordo com os <a href="#" onclick="openTermosGate(event)" style="color:var(--primary);font-weight:600;text-decoration:underline;">Termos e Condições</a>.</span>
+    </label>
+    <button class="btn btn-primary" id="gBtn" onclick="submitEntryGate()">Entrar no catálogo</button>
+    <p id="gError" class="hidden" style="color:var(--danger);font-weight:600;font-size:12px;margin-top:12px;"></p>
+    <p class="entry-gate-note">🔒 Seus dados são usados apenas para identificação em reservas.</p>
+  </div>
+</div>
+
+<div id="appMain" class="hidden">
+<div class="topbar">
+  <div class="brand">
+    <div class="brand-mark">A</div>
+    <div class="brand-text"><div class="name">Amvox</div><div class="sub">Catálogo de Vendas Internas</div></div>
+  </div>
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="catalogo">Catálogo</button>
+    <button class="tab-btn" data-tab="chamados">Meus chamados</button>
+    <button class="tab-btn" data-tab="admin">Painel administrativo</button>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <!-- ===================== CATÁLOGO ===================== -->
+  <section id="tab-catalogo">
+    <div class="info-strip">
+      <div class="info-item">
+        <div class="info-icon">🛒</div>
+        <div><h3>Selecione quantos itens quiser</h3><p>Marque tudo que precisa e finalize numa reserva só. Após finalizar a reserva, não esqueça de abrir o chamado no Gestão.</p></div>
+      </div>
+      <div class="info-item">
+        <div class="info-icon">📊</div>
+        <div><h3>Avaliação do DP</h3><p>Toda compra em crédito em folha passa por avaliação do Departamento Pessoal antes de ser liberada. Se o DP retornar que o associado não tem mais espaço na folha, o pagamento terá que ser feito via Pix — nesse caso, será necessário abrir um novo chamado para o setor de Faturamento, onde o mesmo irá te passar a chave Pix para o pagamento.</p></div>
+      </div>
+      <div class="info-item">
+        <div class="info-icon">🔒</div>
+        <div><h3>Reserva automática</h3><p>Ao abrir o chamado, o item já fica reservado — evita que duas pessoas peçam a mesma coisa.</p></div>
+      </div>
+    </div>
+
+    <div class="cat-header">
+      <div>
+        <h1>Catálogo de Vendas Internas</h1>
+        <p id="resultCount">Carregando itens...</p>
+      </div>
+    </div>
+
+    <div class="controls">
+      <div class="search-box"><input type="text" id="searchInput" placeholder="Buscar por número, modelo ou descrição..."></div>
+      <div class="chip-row" id="catChips"></div>
+    </div>
+
+    <div class="grid" id="grid"></div>
+    <div class="empty hidden" id="emptyState"><div class="big">🔍</div>Nenhum item encontrado para essa busca.</div>
+  </section>
+
+  <!-- ===================== MEUS CHAMADOS ===================== -->
+  <section id="tab-chamados" class="hidden">
+    <h1 style="margin-bottom:4px;">Meus chamados</h1>
+    <p style="color:var(--ink-soft);font-size:13.5px;margin:0 0 18px;">Digite sua matrícula (ou nome) para localizar suas reservas.</p>
+    <div class="lookup">
+      <input type="text" id="lookupInput" placeholder="Matrícula ou nome...">
+      <button class="btn btn-primary" onclick="renderMeusChamados()">Buscar</button>
+    </div>
+    <div id="ticketList"></div>
+    <div class="empty hidden" id="ticketEmpty"><div class="big">🎫</div>Nenhum chamado encontrado para essa busca.</div>
+  </section>
+
+  <!-- ===================== PAINEL ADMINISTRATIVO ===================== -->
+  <section id="tab-admin" class="hidden">
+    <div id="adminGate" class="gate">
+      <div style="font-size:30px;">🔒</div>
+      <h2>Painel administrativo</h2>
+      <p>Acesso restrito para avaliar chamados e gerenciar o catálogo.</p>
+      <input type="text" id="adminCode" placeholder="Código de acesso">
+      <button class="btn btn-primary" style="width:100%;" onclick="checkAdminAccess()">Entrar</button>
+      <p id="adminError" class="hidden" style="color:var(--danger);font-weight:600;">Código inválido.</p>
+    </div>
+
+    <div id="adminPanel" class="hidden">
+      <h1 style="margin-bottom:4px;">Painel administrativo</h1>
+      <p style="color:var(--ink-soft);font-size:13.5px;margin:0 0 18px;">Tudo o que foi pedido, reservado e vendido — em um lugar só.</p>
+      <div class="subtabs">
+        <button class="subtab-btn active" data-sub="chamados" onclick="switchAdminSub('chamados')">Chamados / Reservas</button>
+        <button class="subtab-btn" data-sub="catalogo" onclick="switchAdminSub('catalogo')">Gerenciar catálogo</button>
+      </div>
+
+      <!-- Sub: Chamados -->
+      <div id="admin-sub-chamados">
+        <div class="dp-summary" id="dpSummary"></div>
+        <div class="chip-row" id="dpFilterChips" style="margin-bottom:16px;"></div>
+        <div id="dpList"></div>
+        <div class="empty hidden" id="dpEmpty"><div class="big">📭</div>Nenhum chamado nessa categoria.</div>
+      </div>
+
+      <!-- Sub: Catálogo -->
+      <div id="admin-sub-catalogo" class="hidden">
+        <div class="form-card">
+          <h2>Adicionar item</h2>
+          <p>Preencha os dados do item novo. O número deve ser único (patrimônio, ID ou etiqueta).</p>
+          <div class="form-grid">
+            <div class="field"><label>Categoria</label>
+              <select id="newCategoria">
+                <option>Computadores</option><option>Monitores</option><option>Impressoras</option>
+                <option>SSDs e Periféricos</option><option value="__outra">Outra categoria...</option>
+              </select>
+            </div>
+            <div class="field span2" id="newCategoriaCustomWrap" style="display:none;">
+              <label>Nome da nova categoria</label><input type="text" id="newCategoriaCustom" placeholder="Ex: Notebooks">
+            </div>
+            <div class="field"><label>Número / Patrimônio</label><input type="text" id="newNumero" placeholder="Ex: 512"></div>
+            <div class="field span2"><label>Título</label><input type="text" id="newTitulo" placeholder="Ex: Notebook Dell Latitude"></div>
+            <div class="field span3"><label>Descrição</label><textarea id="newDescricao" placeholder="Especificações, defeitos, observações..."></textarea></div>
+            <div class="field"><label>Condição (opcional)</label><input type="text" id="newCondicao" placeholder="Ex: Sem pé, Arranhado, Novo"></div>
+            <div class="field"><label>Preço (R$)</label><input type="number" id="newPreco" min="0" step="0.01" placeholder="Ex: 350.00"></div>
+            <div class="field"><label>Estoque (só p/ itens com quantidade, ex: SSDs)</label><input type="number" id="newEstoque" min="0" step="1" placeholder="Deixe em branco p/ item único"></div>
+            <div class="field span3">
+              <label>Foto do produto (opcional)</label>
+              <input type="file" id="newFoto" accept="image/*">
+              <div id="newFotoPreviewWrap" class="hidden" style="margin-top:8px;">
+                <img id="newFotoPreview" style="width:120px;height:90px;object-fit:cover;border-radius:8px;border:1px solid var(--line);">
+              </div>
+            </div>
+          </div>
+          <button class="btn btn-primary" onclick="addItem()">Adicionar ao catálogo</button>
+          <span id="addError" class="hidden" style="color:var(--danger);font-size:12.5px;font-weight:600;margin-left:10px;">Preencha número, título e preço.</span>
+        </div>
+        <div class="panel-head">
+          <div><h2 style="font-size:17px;margin:0;">Itens no catálogo</h2></div>
+          <div class="search-box" style="max-width:280px;"><input type="text" id="manageSearch" placeholder="Buscar item..."></div>
+        </div>
+        <div id="manageList"></div>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+</div><!-- /appMain -->
+
+<!-- floating cart bar -->
+<div class="cart-bar" id="cartBar">
+  <div class="ct" id="cartBarText"></div>
+  <button class="btn btn-primary" onclick="openReservaModal()">Finalizar reserva →</button>
+</div>
+
+<!-- modal -->
+<div class="overlay hidden" id="modalOverlay"><div class="modal" id="modalContent"></div></div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const ADMIN_CODE = 'AMVOX2026';
+
+/* ============ GATE DE ENTRADA (nome, email, CPF) ============ */
+(function initEntryGate(){
+  const gate = document.getElementById('entryGate');
+  const appMain = document.getElementById('appMain');
+
+  if (sessionStorage.getItem('amvox_gate_ok') === '1') {
+    gate.classList.add('hidden');
+    appMain.classList.remove('hidden');
+    return;
+  }
+
+  const cpfInput = document.getElementById('gCpf');
+  cpfInput.addEventListener('input', () => {
+    let v = cpfInput.value.replace(/\D/g,'').slice(0,11);
+    v = v.replace(/(\d{3})(\d)/,'$1.$2').replace(/(\d{3})(\d)/,'$1.$2').replace(/(\d{3})(\d{1,2})$/,'$1-$2');
+    cpfInput.value = v;
+  });
+})();
+
+async function submitEntryGate(){
+  const btn = document.getElementById('gBtn');
+  const errEl = document.getElementById('gError');
+  errEl.classList.add('hidden');
+
+  const nome = document.getElementById('gNome').value.trim();
+  const email = document.getElementById('gEmail').value.trim();
+  const cpf = document.getElementById('gCpf').value.replace(/\D/g,'');
+  const aceiteTermos = document.getElementById('gAceite').checked;
+
+  if(nome.length < 2){ showGateError('Digite seu nome completo.'); return; }
+  if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){ showGateError('Digite um email válido.'); return; }
+  if(cpf.length !== 11){ showGateError('CPF inválido. Digite os 11 números.'); return; }
+  if(!aceiteTermos){ showGateError('Você precisa aceitar os Termos e Condições para continuar.'); return; }
+
+  btn.disabled = true;
+  const originalLabel = btn.textContent;
+  btn.textContent = 'Enviando...';
+
+  try{
+    const res = await fetch('/api/cadastro', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ nome, email, cpf, aceiteTermos })
+    });
+    const data = await res.json();
+    if(!res.ok) throw new Error(data.error || 'Não foi possível registrar.');
+
+    sessionStorage.setItem('amvox_gate_ok', '1');
+    sessionStorage.setItem('amvox_gate_data', JSON.stringify({ nome, cpf: document.getElementById('gCpf').value }));
+    document.getElementById('entryGate').classList.add('hidden');
+    document.getElementById('appMain').classList.remove('hidden');
+  } catch(err){
+    showGateError(err.message || 'Erro ao registrar. Tente novamente.');
+    btn.disabled = false;
+    btn.textContent = originalLabel;
+  }
+}
+
+function openTermosGate(e){
+  e.preventDefault();
+  modalContent.innerHTML = `
+    <div class="modal-head"><h2>Termos e Condições</h2></div>
+    <div class="modal-body" style="font-size:13px;line-height:1.65;color:var(--ink-soft);">
+      <p><b style="color:var(--ink);">1. Objetivo.</b> Este catálogo destina-se exclusivamente à reserva de itens de TI por colaboradores da Amvox, para aquisição via Pix ou crédito em folha, mediante avaliação do Departamento Pessoal (DP).</p>
+      <p><b style="color:var(--ink);">2. Dados coletados.</b> Nome, email e CPF são coletados para identificação do colaborador e vinculação das reservas realizadas, conforme a Lei Geral de Proteção de Dados Pessoais (Lei nº 13.709/2018).</p>
+      <p><b style="color:var(--ink);">3. Reserva de itens.</b> Ao selecionar um item e abrir um chamado, o item fica automaticamente reservado, sujeito à disponibilidade em estoque no momento da confirmação.</p>
+      <p><b style="color:var(--ink);">4. Aprovação do DP.</b> Compras via crédito em folha passam por avaliação do DP. Caso não haja espaço disponível na folha, o pagamento deverá ser feito via Pix, mediante abertura de novo chamado ao setor de Faturamento.</p>
+      <p><b style="color:var(--ink);">5. Cancelamento.</b> A empresa reserva-se o direito de cancelar reservas em caso de indisponibilidade do item, inconsistência nos dados informados, ou reprovação do DP.</p>
+      <p><b style="color:var(--ink);">6. Responsabilidade.</b> As informações prestadas no momento da reserva (nome, CPF, setor) são de responsabilidade do colaborador e serão usadas para fins de identificação e cobrança.</p>
+    </div>
+    <div class="modal-foot"><button class="btn btn-primary" onclick="closeModal()">Entendi</button></div>
+  `;
+  overlay.classList.remove('hidden');
+}
+
+function showGateError(msg){
+  const errEl = document.getElementById('gError');
+  errEl.textContent = msg;
+  errEl.classList.remove('hidden');
+}
+
+/* ============ MODO ASSOCIADO x STAFF ============
+   Link normal (sem parâmetro): só a aba Catálogo aparece.
+   Link com ?staff=1 no final: mostra também Meus Chamados e Painel Administrativo. */
+const STAFF_MODE = new URLSearchParams(window.location.search).get('staff') === '1';
+if(!STAFF_MODE){
+  const btnChamados = document.querySelector('.tab-btn[data-tab="chamados"]');
+  const btnAdmin = document.querySelector('.tab-btn[data-tab="admin"]');
+  if(btnChamados) btnChamados.style.display = 'none';
+  if(btnAdmin) btnAdmin.style.display = 'none';
+}
+
+/* ============ CATÁLOGO (agora vem do banco via API) ============ */
+let effectiveCatalog = [];
+let cart = []; // {itemId, quantidade}
+
+async function loadCatalog(){
+  const res = await fetch('/api/catalog');
+  if(!res.ok) throw new Error('Falha ao carregar catálogo (' + res.status + ')');
+  const data = await res.json();
+  effectiveCatalog = data.items;
+}
+
+/* ============ UTIL ============ */
+function brl(v){ return Number(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); }
+function esc(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+let toastTimer;
+function showToast(msg){
+  const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(()=>t.classList.remove('show'), 3000);
+}
+
+/* ============ TABS ============ */
+document.querySelectorAll('.tab-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('[id^="tab-"]').forEach(s=>s.classList.add('hidden'));
+    document.getElementById('tab-'+btn.dataset.tab).classList.remove('hidden');
+    if(btn.dataset.tab==='admin' && adminUnlocked) refreshAdmin();
+  });
+});
+
+/* ============ CATALOGO / CART ============ */
+let activeCat = 'Todos', searchTerm = '';
+
+function buildChips(){
+  const cats = [...new Set(effectiveCatalog.map(i=>i.categoria))];
+  const all = ['Todos', ...cats];
+  const chipsWrap = document.getElementById('catChips');
+  chipsWrap.innerHTML = all.map(c=>`<button class="chip ${c===activeCat?'active':''}" data-cat="${esc(c)}">${esc(c)}</button>`).join('');
+  chipsWrap.querySelectorAll('.chip').forEach(ch=>{
+    ch.addEventListener('click', ()=>{ activeCat = ch.dataset.cat; buildChips(); renderGrid(); });
+  });
+}
+document.getElementById('searchInput').addEventListener('input', e=>{ searchTerm = e.target.value.trim().toLowerCase(); renderGrid(); });
+
+function cartQty(itemId){ const l = cart.find(c=>c.itemId===itemId); return l ? l.quantidade : 0; }
+function maxQtyFor(item){ return item.isStock ? item.availableQty : (item.disponivel ? 1 : 0); }
+
+function changeCartQty(itemId, delta){
+  const item = effectiveCatalog.find(i=>i.id===itemId);
+  if(!item) return;
+  let line = cart.find(c=>c.itemId===itemId);
+  let qty = (line ? line.quantidade : 0) + delta;
+  const max = maxQtyFor(item);
+  qty = Math.max(0, Math.min(qty, max));
+  if(qty===0){ cart = cart.filter(c=>c.itemId!==itemId); }
+  else if(line){ line.quantidade = qty; }
+  else{ cart.push({itemId, quantidade:qty}); }
+  renderGrid(); renderCartBar();
+}
+
+function renderCartBar(){
+  const bar = document.getElementById('cartBar');
+  const totalQty = cart.reduce((a,c)=>a+c.quantidade,0);
+  if(totalQty===0){ bar.classList.remove('show'); return; }
+  const total = cart.reduce((a,c)=>{ const it = effectiveCatalog.find(i=>i.id===c.itemId); return a + (it?it.preco:0)*c.quantidade; },0);
+  document.getElementById('cartBarText').innerHTML = `🛒 <b>${totalQty}</b> ${totalQty===1?'item selecionado':'itens selecionados'} · Total <b>${brl(total)}</b>`;
+  bar.classList.add('show');
+}
+
+function renderGrid(){
+  let items = effectiveCatalog.filter(i=>{
+    const matchCat = activeCat==='Todos' || i.categoria===activeCat;
+    const hay = (String(i.numero)+' '+i.titulo+' '+i.descricao).toLowerCase();
+    const matchSearch = !searchTerm || hay.includes(searchTerm);
+    return matchCat && matchSearch;
+  });
+  document.getElementById('resultCount').textContent = items.length + (items.length===1 ? ' item no catálogo' : ' itens no catálogo');
+  const grid = document.getElementById('grid');
+  document.getElementById('emptyState').classList.toggle('hidden', items.length>0);
+  grid.innerHTML = items.map(i=>{
+    const qty = cartQty(i.id);
+    const max = maxQtyFor(i);
+    let statusBadgeHtml = '';
+    let controlHtml = '';
+    if(!i.disponivel && qty===0){
+      statusBadgeHtml = i.isStock ? '' : `<span class="badge-status ${i.itemStatus==='Vendido'?'bs-vendido':'bs-reservado'}">${esc(i.itemStatus)}</span>`;
+      controlHtml = `<button class="btn btn-outline btn-sm" disabled>${i.isStock ? 'Esgotado' : 'Indisponível'}</button>`;
+    } else {
+      controlHtml = `<div class="stepper">
+        <button class="step-btn" onclick="changeCartQty('${i.id}',-1)" ${qty<=0?'disabled':''}>−</button>
+        <span class="step-val">${qty}</span>
+        <button class="step-btn" onclick="changeCartQty('${i.id}',1)" ${qty>=max?'disabled':''}>+</button>
+      </div>`;
+    }
+    return `
+    <div class="card ${qty>0?'in-cart':''} ${(!i.disponivel && qty===0)?'unavailable':''}">
+      ${i.fotoUrl ? `<img class="card-photo" src="${esc(i.fotoUrl)}" alt="${esc(i.titulo)}" loading="lazy">` : `<div class="card-photo-placeholder">Sem foto</div>`}
+      <div class="card-top">
+        <span class="tag">Nº ${esc(i.numero)}</span>
+        <span class="cat-pill">${esc(i.categoria)}</span>
+      </div>
+      <h3>${esc(i.titulo)}</h3>
+      ${i.condicao ? `<span class="badge-condicao ${i.condicao==='Novo'?'bc-novo':'bc-defeito'}">${i.condicao==='Novo'?'✓':'⚠'} ${esc(i.condicao)}</span>` : ''}
+      <div class="desc">${esc(i.descricao)} ${statusBadgeHtml}</div>
+      <div class="card-bottom">
+        <div class="price">${brl(i.preco)}<br><small>${i.isStock ? i.availableQty+' disponíveis':'valor do item'}</small></div>
+        ${controlHtml}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+/* ============ MODAL: FINALIZAR RESERVA ============ */
+const overlay = document.getElementById('modalOverlay');
+const modalContent = document.getElementById('modalContent');
+let currentPagamento = null;
+
+function openReservaModal(){
+  currentPagamento = null;
+  renderReservaForm();
+  overlay.classList.remove('hidden');
+}
+function closeModal(){ overlay.classList.add('hidden'); modalContent.innerHTML=''; }
+overlay.addEventListener('click', e=>{ if(e.target===overlay) closeModal(); });
+
+function cartTotal(){
+  return cart.reduce((a,c)=>{ const it = effectiveCatalog.find(i=>i.id===c.itemId); return a + (it?it.preco:0)*c.quantidade; },0);
+}
+
+function renderReservaForm(){
+  const total = cartTotal();
+  const linesHtml = cart.map(c=>{
+    const it = effectiveCatalog.find(i=>i.id===c.itemId);
+    return `<div class="cart-line">
+      <div><div class="l1">Nº ${esc(it.numero)} — ${esc(it.titulo)} ${it.condicao ? `<span class="badge-condicao ${it.condicao==='Novo'?'bc-novo':'bc-defeito'}" style="margin-top:0;">${esc(it.condicao)}</span>`:''}</div><div class="l2">${c.quantidade} x ${brl(it.preco)}</div></div>
+      <div>${brl(it.preco*c.quantidade)}</div>
+    </div>`;
+  }).join('');
+  modalContent.innerHTML = `
+    <div class="modal-head"><h2>Finalizar reserva</h2></div>
+    <div class="modal-body">
+      <div>
+        ${linesHtml}
+        <div class="cart-total"><span>Total</span><span>${brl(total)}</span></div>
+      </div>
+      <div class="field"><label>Nome completo</label><input type="text" id="fNome" placeholder="Seu nome completo"></div>
+      <div class="field"><label>CPF</label><input type="text" id="fMatricula" placeholder="000.000.000-00"></div>
+      <div class="field"><label>Setor</label><input type="text" id="fSetor" placeholder="Ex: Financeiro"></div>
+      <div class="field">
+        <label>Forma de pagamento</label>
+        <div class="radio-group">
+          <div class="radio-opt" id="optPix" onclick="selectPagamento('Pix')"><span class="t">Pix</span><span class="s">Pagamento à vista</span></div>
+          <div class="radio-opt" id="optFolha" onclick="selectPagamento('Folha')"><span class="t">Crédito em folha</span><span class="s">Parcelado em até 5x</span></div>
+        </div>
+      </div>
+      <div id="folhaFields"></div>
+      <div id="simBox"></div>
+      <div id="formError" class="hidden sim-box sim-warn"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-outline" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-primary" id="submitBtn" disabled onclick="submitReserva()">Confirmar reserva</button>
+    </div>
+  `;
+  document.getElementById('fNome').addEventListener('input', validateForm);
+  document.getElementById('fMatricula').addEventListener('input', validateForm);
+  document.getElementById('fSetor').addEventListener('input', validateForm);
+
+  const gateData = JSON.parse(sessionStorage.getItem('amvox_gate_data') || 'null');
+  if(gateData){
+    document.getElementById('fNome').value = gateData.nome || '';
+    document.getElementById('fMatricula').value = gateData.cpf || '';
+    validateForm();
+  }
+}
+
+function selectPagamento(tipo){
+  currentPagamento = tipo;
+  document.getElementById('optPix').classList.toggle('sel', tipo==='Pix');
+  document.getElementById('optFolha').classList.toggle('sel', tipo==='Folha');
+  const folhaFields = document.getElementById('folhaFields');
+  if(tipo==='Folha'){
+    folhaFields.innerHTML = `
+      <div class="field"><label>Parcelas</label>
+        <select id="fParcelas">${Array.from({length:5},(_,n)=>`<option value="${n+1}">${n+1}x</option>`).join('')}</select>
+      </div>
+    `;
+    document.getElementById('fParcelas').addEventListener('change', updateSimulation);
+  } else { folhaFields.innerHTML = ''; }
+  updateSimulation(); validateForm();
+}
+
+function updateSimulation(){
+  const box = document.getElementById('simBox');
+  const total = cartTotal();
+  if(!currentPagamento){ box.innerHTML=''; return; }
+  if(currentPagamento==='Pix'){
+    box.innerHTML = `<div class="sim-box sim-ok"><b>${brl(total)}</b> à vista via Pix. Itens ficam reservados assim que o chamado é aberto.</div>`;
+    return;
+  }
+  const parcelas = parseInt(document.getElementById('fParcelas')?.value || '1',10);
+  const valorParcela = total / parcelas;
+  box.innerHTML = `<div class="sim-box sim-warn">${parcelas}x de <b>${brl(valorParcela)}</b> em folha. Este chamado será enviado para avaliação do DP e liberado após a aprovação.</div>`;
+}
+
+function validateForm(){
+  const btn = document.getElementById('submitBtn');
+  if(!btn) return;
+  const nome = document.getElementById('fNome')?.value.trim();
+  const matricula = document.getElementById('fMatricula')?.value.trim();
+  const setor = document.getElementById('fSetor')?.value.trim();
+  let ok = nome && matricula && setor && currentPagamento;
+  if(currentPagamento==='Folha'){
+    ok = ok && document.getElementById('fParcelas');
+  }
+  btn.disabled = !ok;
+}
+
+async function submitReserva(){
+  const btn = document.getElementById('submitBtn');
+  const originalLabel = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Salvando...';
+  clearFormError();
+
+  const nome = document.getElementById('fNome').value.trim();
+  const matricula = document.getElementById('fMatricula').value.trim();
+  const setor = document.getElementById('fSetor').value.trim();
+  const payload = {
+    nome, matricula, setor,
+    pagamento: currentPagamento==='Pix' ? 'Pix' : 'Crédito em Folha',
+    parcelas: currentPagamento==='Folha' ? parseInt(document.getElementById('fParcelas').value,10) : null,
+    itens: cart.map(c => ({ itemId: c.itemId, quantidade: c.quantidade }))
+  };
+
+  try{
+    const res = await fetch('/api/reservas', {
+      method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if(!res.ok) throw new Error(data.error || 'Falha ao salvar a reserva.');
+
+    cart = [];
+    await loadCatalog();
+    buildChips(); renderGrid(); renderCartBar();
+    renderConfirmation(data);
+  } catch(err){
+    console.error('Erro ao salvar reserva', err);
+    btn.disabled = false;
+    btn.textContent = originalLabel;
+    setFormError(err.message || 'Não foi possível salvar a reserva agora. Tente de novo em instantes.');
+  }
+}
+
+function setFormError(msg){
+  let el = document.getElementById('formError');
+  if(!el) return;
+  el.textContent = msg;
+  el.classList.remove('hidden');
+}
+function clearFormError(){
+  const el = document.getElementById('formError');
+  if(el) el.classList.add('hidden');
+}
+
+function renderConfirmation(c){
+  const itemsHtml = c.itens.map(it=>`<div class="cart-line"><div class="l1">Nº ${esc(it.numero)} — ${esc(it.titulo)}</div><div>${it.quantidade}x</div></div>`).join('');
+  modalContent.innerHTML = `
+    <div class="modal-body" style="text-align:center;padding-top:30px;">
+      <div class="confirm-icon">✓</div>
+      <h2>Reserva confirmada</h2>
+      <p style="color:var(--ink-soft);font-size:13.5px;">Guarde o protocolo para acompanhar em "Meus chamados".</p>
+      <div class="protocol">${c.protocolo}</div>
+      <div style="margin:14px 0;">${statusBadge(c.status)}</div>
+      <div style="text-align:left;">${itemsHtml}</div>
+      <p style="font-size:13px;color:var(--ink-soft);margin-top:10px;">Total: <b>${brl(c.valorTotal)}</b></p>
+      <p id="imgError" class="hidden" style="color:var(--danger);font-size:12px;margin-top:8px;"></p>
+    </div>
+    <div class="modal-foot" style="justify-content:center;">
+      <button class="btn btn-outline" id="btnBaixarResumo" onclick="baixarResumoImagem()">Baixar resumo (imagem)</button>
+      <button class="btn btn-primary" onclick="closeModal();">Concluir</button>
+    </div>
+  `;
+  renderSummaryCardOffscreen(c);
+}
+
+function renderSummaryCardOffscreen(c){
+  let wrap = document.getElementById('summaryCardWrap');
+  if(!wrap){
+    wrap = document.createElement('div');
+    wrap.id = 'summaryCardWrap';
+    wrap.style.cssText = 'position:absolute;left:-9999px;top:0;';
+    document.body.appendChild(wrap);
+  }
+  const itensHtml = (c.itens||[]).map(it => `
+    <div style="display:flex;justify-content:space-between;gap:14px;padding:10px 0;border-bottom:1px solid #F1EFE8;">
+      <div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#6B000C;">Nº ${esc(it.numero)}</div>
+        <div style="font-weight:600;font-size:13.5px;color:#14202B;">${esc(it.titulo)}</div>
+        <div style="font-size:11.5px;color:#4B5B68;">${esc(it.descricao||'')}</div>
+      </div>
+      <div style="text-align:right;white-space:nowrap;">
+        <div style="font-size:11.5px;color:#4B5B68;">${it.quantidade}x</div>
+        <div style="font-weight:700;font-family:'Space Grotesk',sans-serif;color:#1A1A1A;">${brl(it.preco*it.quantidade)}</div>
+      </div>
+    </div>`).join('');
+  wrap.innerHTML = `
+    <div id="summaryCard" style="width:520px;background:#ffffff;padding:30px;font-family:'IBM Plex Sans',sans-serif;color:#14202B;">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px;border-bottom:2px solid #7A0209;padding-bottom:14px;">
+        <div style="width:36px;height:36px;border-radius:9px;background:#9E010E;display:flex;align-items:center;justify-content:center;color:#ffffff;font-weight:700;font-size:16px;font-family:'Space Grotesk',sans-serif;">A</div>
+        <div>
+          <div style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:17px;">Amvox · Vendas Internas</div>
+          <div style="font-size:11px;color:#4B5B68;">Resumo da reserva</div>
+        </div>
+      </div>
+      <div style="font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:15px;background:#FCEDEE;border:1px dashed #E5A3AA;border-radius:8px;padding:8px 12px;display:inline-block;color:#6B000C;margin-bottom:14px;">${esc(c.protocolo)}</div>
+      <div style="font-size:12px;color:#4B5B68;margin-bottom:2px;">Colaborador</div>
+      <div style="font-size:13.5px;font-weight:600;margin-bottom:10px;">${esc(c.nome||'-')} · ${esc(c.matricula||'-')}${c.setor ? ' · '+esc(c.setor) : ''}</div>
+      <div style="font-size:12px;color:#4B5B68;margin-bottom:2px;">Pagamento</div>
+      <div style="font-size:13.5px;font-weight:600;margin-bottom:14px;">${esc(c.pagamento||'-')}${c.parcelas ? (' · '+c.parcelas+'x de '+brl(c.valorParcela)) : ''}</div>
+      <div style="border-top:1px solid #E1E8EE;padding-top:2px;">${itensHtml}</div>
+      <div style="display:flex;justify-content:space-between;padding-top:14px;font-weight:700;font-size:16px;font-family:'Space Grotesk',sans-serif;">
+        <span>Total</span><span>${brl(c.valorTotal)}</span>
+      </div>
+      <div style="margin-top:16px;font-size:10px;color:#B4B2A9;">Gerado em ${new Date(c.dataAbertura||Date.now()).toLocaleString('pt-BR')}</div>
+    </div>
+  `;
+}
+
+async function captureSummaryAndDownload(protocolo){
+  const el = document.getElementById('summaryCard');
+  if(!el || typeof html2canvas === 'undefined'){
+    throw new Error('Não foi possível gerar a imagem agora.');
+  }
+  const canvas = await html2canvas(el, { scale: 2, backgroundColor: '#ffffff' });
+  const link = document.createElement('a');
+  link.download = protocolo ? `reserva-${protocolo}.png` : 'reserva.png';
+  link.href = canvas.toDataURL('image/png');
+  link.click();
+}
+
+async function baixarResumoImagem(){
+  const btn = document.getElementById('btnBaixarResumo');
+  const errEl = document.getElementById('imgError');
+  if(errEl) errEl.classList.add('hidden');
+  const original = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Gerando...';
+  try{
+    const protocoloEl = document.querySelector('.protocol');
+    await captureSummaryAndDownload(protocoloEl ? protocoloEl.textContent.trim() : null);
+  } catch(err){
+    console.error('Erro ao gerar imagem do resumo', err);
+    if(errEl){ errEl.textContent = 'Não foi possível gerar a imagem. Tente novamente.'; errEl.classList.remove('hidden'); }
+  } finally {
+    btn.disabled = false; btn.textContent = original;
+  }
+}
+
+async function baixarResumoAdmin(protocolo){
+  const chamado = (adminChamadosList || []).find(c => c.protocolo === protocolo);
+  if(!chamado){ showToast('Chamado não encontrado. Atualize a lista e tente de novo.'); return; }
+  try{
+    renderSummaryCardOffscreen(chamado);
+    await captureSummaryAndDownload(protocolo);
+  } catch(err){
+    console.error('Erro ao gerar imagem do resumo', err);
+    showToast('Não foi possível gerar a imagem agora. Tente novamente.');
+  }
+}
+
+function statusBadge(status){
+  const map = {
+    'Aguardando pagamento Pix': ['badge-pix','Aguardando pagamento Pix'],
+    'Aprovado automaticamente': ['badge-ok','Aprovado'],
+    'Aguardando avaliação do DP': ['badge-dp','Aguardando avaliação do DP'],
+    'Aprovado pelo DP': ['badge-ok','Aprovado pelo DP'],
+    'Reprovado pelo DP': ['badge-rep','Reprovado pelo DP'],
+    'Concluído': ['badge-done','Concluído'],
+    'Cancelado': ['badge-rep','Cancelado'],
+  };
+  const [cls,label] = map[status] || ['badge-pix', status];
+  return `<span class="badge ${cls}">${label}</span>`;
+}
+
+/* ============ MEUS CHAMADOS ============ */
+async function renderMeusChamados(){
+  const q = document.getElementById('lookupInput').value.trim();
+  const wrap = document.getElementById('ticketList');
+  if(!q){
+    wrap.innerHTML = '';
+    document.getElementById('ticketEmpty').classList.add('hidden');
+    return;
+  }
+  try{
+    const res = await fetch('/api/reservas?q=' + encodeURIComponent(q));
+    if(!res.ok) throw new Error('Falha ao buscar chamados');
+    const data = await res.json();
+    const filtered = data.chamados;
+    document.getElementById('ticketEmpty').classList.toggle('hidden', filtered.length>0);
+    wrap.innerHTML = filtered.map(c=>`
+      <div class="ticket">
+        <div class="ticket-top">
+          <div><span class="mono" style="font-size:11.5px;color:var(--ink-soft);">${c.protocolo}</span></div>
+          ${statusBadge(c.status)}
+        </div>
+        <div class="meta">${esc(c.pagamento)}${c.parcelas ? ' · '+c.parcelas+'x de '+brl(c.valorParcela) : ''} · ${new Date(c.dataAbertura).toLocaleDateString('pt-BR')}</div>
+        <div class="items-list">${c.itens.map(it=>`Nº ${esc(it.numero)} — ${esc(it.titulo)} (${it.quantidade}x)`).join(' · ')}</div>
+        <div style="margin-top:8px;" class="val">Total: ${brl(c.valorTotal)}</div>
+      </div>
+    `).join('');
+  } catch(err){
+    console.error('Erro ao buscar chamados', err);
+    showToast('Não foi possível buscar seus chamados agora. Tente de novo.');
+  }
+}
+
+/* ============ ADMIN ============ */
+let adminUnlocked = false;
+function checkAdminAccess(){
+  const val = document.getElementById('adminCode').value.trim();
+  if(val === ADMIN_CODE){
+    adminUnlocked = true;
+    document.getElementById('adminGate').classList.add('hidden');
+    document.getElementById('adminPanel').classList.remove('hidden');
+    refreshAdmin();
+  } else { document.getElementById('adminError').classList.remove('hidden'); }
+}
+function switchAdminSub(name){
+  document.querySelectorAll('.subtab-btn').forEach(b=>b.classList.toggle('active', b.dataset.sub===name));
+  document.getElementById('admin-sub-chamados').classList.toggle('hidden', name!=='chamados');
+  document.getElementById('admin-sub-catalogo').classList.toggle('hidden', name!=='catalogo');
+  if(name==='chamados') renderDP();
+  else renderManageList();
+}
+async function refreshAdmin(){
+  try{ await loadCatalog(); } catch(e){ console.error(e); }
+  renderDP();
+  renderManageList();
+}
+
+let dpFilter = 'Aguardando avaliação do DP';
+let adminChamadosList = [];
+async function renderDP(){
+  let list;
+  try{
+    const res = await fetch('/api/reservas'); // sem "q" = retorna todos os chamados
+    if(!res.ok) throw new Error('Falha ao carregar chamados');
+    list = (await res.json()).chamados;
+    adminChamadosList = list;
+  } catch(err){
+    console.error('Erro ao carregar chamados', err);
+    showToast('Não foi possível carregar os chamados agora.');
+    return;
+  }
+
+  const active = c => !['Reprovado pelo DP','Cancelado','Concluído'].includes(c.status);
+  const counts = {
+    'Todos': list.length,
+    'Aguardando avaliação do DP': list.filter(c=>c.status==='Aguardando avaliação do DP').length,
+    'Reservado (ativo)': list.filter(active).length,
+    'Concluído': list.filter(c=>c.status==='Concluído').length,
+    'Cancelado / Reprovado': list.filter(c=>['Cancelado','Reprovado pelo DP'].includes(c.status)).length,
+  };
+  document.getElementById('dpSummary').innerHTML = `
+    <div class="dp-stat"><div class="n">${counts['Todos']}</div><div class="l">Total de chamados</div></div>
+    <div class="dp-stat"><div class="n" style="color:var(--warning);">${counts['Aguardando avaliação do DP']}</div><div class="l">Aguardando DP</div></div>
+    <div class="dp-stat"><div class="n" style="color:var(--primary);">${counts['Reservado (ativo)']}</div><div class="l">Reservas ativas</div></div>
+    <div class="dp-stat"><div class="n" style="color:#5B3FA0;">${counts['Concluído']}</div><div class="l">Concluídos</div></div>
+    <div class="dp-stat"><div class="n" style="color:var(--danger);">${counts['Cancelado / Reprovado']}</div><div class="l">Cancelados / Reprovados</div></div>
+  `;
+  const chips = ['Aguardando avaliação do DP','Reservado (ativo)','Todos','Concluído','Cancelado / Reprovado'];
+  document.getElementById('dpFilterChips').innerHTML = chips.map(c=>`<button class="chip ${c===dpFilter?'active':''}" data-f="${esc(c)}">${esc(c)} (${counts[c]})</button>`).join('');
+  document.querySelectorAll('#dpFilterChips .chip').forEach(ch=>{ ch.addEventListener('click', ()=>{ dpFilter = ch.dataset.f; renderDP(); }); });
+
+  let rows;
+  if(dpFilter==='Todos') rows = list;
+  else if(dpFilter==='Reservado (ativo)') rows = list.filter(active);
+  else if(dpFilter==='Cancelado / Reprovado') rows = list.filter(c=>['Cancelado','Reprovado pelo DP'].includes(c.status));
+  else rows = list.filter(c=>c.status===dpFilter);
+  document.getElementById('dpEmpty').classList.toggle('hidden', rows.length>0);
+  document.getElementById('dpList').innerHTML = rows.map(c=>{
+    const itemsHtml = c.itens.map(it=>`Nº ${esc(it.numero)} — ${esc(it.titulo)} (${it.quantidade}x ${brl(it.preco)})`).join('<br>');
+    let actions = '';
+    if(c.status==='Aguardando avaliação do DP'){
+      actions = `<textarea class="obs" id="obs-${c.protocolo}" placeholder="Observação (opcional)"></textarea>
+        <div class="dp-actions">
+          <button class="btn btn-success btn-sm" onclick="dpDecide('${c.protocolo}','Aprovado pelo DP')">Aprovar</button>
+          <button class="btn btn-danger-outline btn-sm" onclick="dpDecide('${c.protocolo}','Reprovado pelo DP')">Reprovar</button>
+        </div>`;
+    } else if(active(c)){
+      actions = `<div class="dp-actions">
+          <button class="btn btn-success btn-sm" onclick="dpDecide('${c.protocolo}','Concluído')">Concluir venda</button>
+          <button class="btn btn-danger-outline btn-sm" onclick="dpDecide('${c.protocolo}','Cancelado')">Cancelar reserva</button>
+        </div>`;
+    }
+    return `
+    <div class="dp-row">
+      <div class="dp-row-top">
+        <div><span class="mono" style="font-size:11.5px;color:var(--ink-soft);">${c.protocolo}</span> <strong style="margin-left:8px;">${esc(c.nome)}</strong></div>
+        ${statusBadge(c.status)}
+      </div>
+      <div class="dp-items">${itemsHtml}</div>
+      <div class="dp-grid">
+        <div><span>CPF</span>${esc(c.matricula)}</div>
+        <div><span>Setor</span>${esc(c.setor||'-')}</div>
+        <div><span>Valor total</span>${brl(c.valorTotal)}</div>
+        <div><span>Pagamento</span>${esc(c.pagamento)}${c.parcelas ? ' · '+c.parcelas+'x de '+brl(c.valorParcela):''}</div>
+        <div><span>Data de abertura</span>${new Date(c.dataAbertura).toLocaleString('pt-BR')}</div>
+        <div><span>Observação DP</span>${c.observacaoDP ? esc(c.observacaoDP) : '—'}</div>
+      </div>
+      <div class="dp-actions">
+        <button class="btn btn-outline btn-sm" onclick="baixarResumoAdmin('${c.protocolo}')">Baixar resumo</button>
+      </div>
+      ${actions}
+    </div>`;
+  }).join('');
+}
+
+async function dpDecide(protocolo, decisao){
+  try{
+    const obsEl = document.getElementById('obs-'+protocolo);
+    const observacaoDP = obsEl && obsEl.value.trim() ? obsEl.value.trim() : undefined;
+    const res = await fetch('/api/reservas/' + encodeURIComponent(protocolo), {
+      method: 'PATCH', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ status: decisao, observacaoDP })
+    });
+    const data = await res.json();
+    if(!res.ok) throw new Error(data.error || 'Falha ao atualizar o chamado.');
+
+    await loadCatalog();
+    buildChips(); renderGrid();
+    renderDP();
+  } catch(err){
+    console.error('Erro ao processar decisão do DP', err);
+    showToast('Não foi possível salvar: ' + err.message);
+  }
+}
+
+/* ============ GERENCIAR CATÁLOGO ============ */
+document.getElementById('newCategoria').addEventListener('change', e=>{
+  document.getElementById('newCategoriaCustomWrap').style.display = e.target.value==='__outra' ? 'block' : 'none';
+});
+
+function resizeImageFile(file, maxWidth, quality){
+  maxWidth = maxWidth || 800; quality = quality || 0.8;
+  return new Promise((resolve, reject)=>{
+    const reader = new FileReader();
+    reader.onload = (e)=>{
+      const img = new Image();
+      img.onload = ()=>{
+        let w = img.width, h = img.height;
+        if(w > maxWidth){ h = Math.round(h * (maxWidth / w)); w = maxWidth; }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.onerror = () => reject(new Error('Não foi possível ler a imagem.'));
+      img.src = e.target.result;
+    };
+    reader.onerror = () => reject(new Error('Não foi possível ler o arquivo.'));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function uploadFoto(file){
+  const dataUrl = await resizeImageFile(file);
+  const base64 = dataUrl.split(',')[1];
+  const res = await fetch('/api/upload', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ filename: file.name, contentType: 'image/jpeg', dataBase64: base64 })
+  });
+  const data = await res.json();
+  if(!res.ok) throw new Error(data.error || 'Falha ao enviar a foto.');
+  return data.url;
+}
+
+document.getElementById('newFoto').addEventListener('change', e=>{
+  const file = e.target.files[0];
+  const wrap = document.getElementById('newFotoPreviewWrap');
+  const img = document.getElementById('newFotoPreview');
+  if(!file){ wrap.classList.add('hidden'); return; }
+  const reader = new FileReader();
+  reader.onload = ev => { img.src = ev.target.result; wrap.classList.remove('hidden'); };
+  reader.readAsDataURL(file);
+});
+
+async function addItem(){
+  const catSel = document.getElementById('newCategoria').value;
+  const categoria = catSel==='__outra' ? document.getElementById('newCategoriaCustom').value.trim() : catSel;
+  const numero = document.getElementById('newNumero').value.trim();
+  const titulo = document.getElementById('newTitulo').value.trim();
+  const descricao = document.getElementById('newDescricao').value.trim();
+  const condicao = document.getElementById('newCondicao').value.trim();
+  const preco = parseFloat(document.getElementById('newPreco').value);
+  const estoqueRaw = document.getElementById('newEstoque').value;
+  const fotoFile = document.getElementById('newFoto').files[0];
+  const errEl = document.getElementById('addError');
+  if(!numero || !titulo || !preco || preco<=0 || !categoria){ errEl.classList.remove('hidden'); return; }
+  errEl.classList.add('hidden');
+
+  try{
+    let fotoUrl = null;
+    if(fotoFile){
+      showToast('Enviando foto...');
+      fotoUrl = await uploadFoto(fotoFile);
+    }
+    const res = await fetch('/api/catalog', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ categoria, numero, titulo, descricao, condicao: condicao || null, preco, estoque: estoqueRaw !== '' ? parseInt(estoqueRaw,10) : null, fotoUrl })
+    });
+    const data = await res.json();
+    if(!res.ok) throw new Error(data.error || 'Falha ao adicionar item.');
+
+    await loadCatalog();
+    buildChips(); renderGrid(); renderManageList();
+    document.getElementById('newNumero').value=''; document.getElementById('newTitulo').value='';
+    document.getElementById('newDescricao').value=''; document.getElementById('newCondicao').value='';
+    document.getElementById('newPreco').value=''; document.getElementById('newEstoque').value='';
+    document.getElementById('newFoto').value=''; document.getElementById('newFotoPreviewWrap').classList.add('hidden');
+    showToast('Item adicionado ao catálogo!');
+  } catch(err){
+    console.error('Erro ao salvar item', err);
+    showToast('Não foi possível salvar: ' + err.message);
+  }
+}
+
+let manageSearchTerm = '';
+document.getElementById('manageSearch').addEventListener('input', e=>{ manageSearchTerm = e.target.value.trim().toLowerCase(); renderManageList(); });
+
+function renderManageList(){
+  let items = effectiveCatalog.filter(i=>{
+    const hay = (String(i.numero)+' '+i.titulo+' '+i.descricao).toLowerCase();
+    return !manageSearchTerm || hay.includes(manageSearchTerm);
+  });
+  const wrap = document.getElementById('manageList');
+  if(!wrap) return;
+  wrap.innerHTML = items.map(i=>{
+    const statusTxt = i.isStock ? `${i.availableQty}/${i.estoque} disponíveis` : i.itemStatus;
+    return `
+    <div class="manage-row" id="row-${i.id}">
+      <div class="info">
+        <div class="t1"><span class="mono">Nº ${esc(i.numero)}</span> — ${esc(i.titulo)} ${i.isCustom ? '<span class="badge-custom">Novo</span>':''} ${i.condicao ? `<span class="badge-condicao ${i.condicao==='Novo'?'bc-novo':'bc-defeito'}" style="margin-top:0;">${esc(i.condicao)}</span>`:''}</div>
+        <div class="t2">${esc(i.categoria)} · ${esc(i.descricao)} · ${esc(statusTxt)}</div>
+      </div>
+      <div class="price" style="font-family:'Space Grotesk';font-weight:700;">${brl(i.preco)}</div>
+      <div class="actions">
+        <button class="btn btn-outline btn-sm" onclick="toggleEdit('${i.id}')">Editar</button>
+        <button class="btn btn-danger-outline btn-sm" onclick="removeItem('${i.id}')">Remover</button>
+      </div>
+      <div class="edit-box hidden" id="edit-${i.id}"></div>
+    </div>`;
+  }).join('') || '<p style="color:var(--ink-soft);">Nenhum item encontrado.</p>';
+}
+
+function toggleEdit(id){
+  const box = document.getElementById('edit-'+id);
+  const isOpen = !box.classList.contains('hidden');
+  document.querySelectorAll('.edit-box').forEach(b=>b.classList.add('hidden'));
+  if(isOpen) return;
+  const i = effectiveCatalog.find(x=>x.id===id);
+  box.innerHTML = `
+    <div class="form-grid">
+      <div class="field"><label>Categoria</label><input type="text" id="e-cat-${id}" value="${esc(i.categoria)}"></div>
+      <div class="field"><label>Número</label><input type="text" id="e-num-${id}" value="${esc(i.numero)}"></div>
+      <div class="field"><label>Preço (R$)</label><input type="number" step="0.01" id="e-preco-${id}" value="${i.preco}"></div>
+      <div class="field"><label>Condição (opcional)</label><input type="text" id="e-cond-${id}" value="${esc(i.condicao||'')}" placeholder="Ex: Sem pé, Arranhado, Novo"></div>
+      <div class="field span2"><label>Título</label><input type="text" id="e-tit-${id}" value="${esc(i.titulo)}"></div>
+      <div class="field span3"><label>Descrição</label><textarea id="e-desc-${id}">${esc(i.descricao)}</textarea></div>
+      <div class="field span3">
+        <label>Foto do produto</label>
+        ${i.fotoUrl ? `<img src="${esc(i.fotoUrl)}" style="width:120px;height:90px;object-fit:cover;border-radius:8px;border:1px solid var(--line);display:block;margin-bottom:8px;">` : ''}
+        <input type="file" id="e-foto-${id}" accept="image/*">
+        <div id="e-foto-preview-wrap-${id}" class="hidden" style="margin-top:8px;">
+          <img id="e-foto-preview-${id}" style="width:120px;height:90px;object-fit:cover;border-radius:8px;border:1px solid var(--line);">
+        </div>
+      </div>
+    </div>
+    <button class="btn btn-primary btn-sm" onclick="saveEdit('${id}')">Salvar alterações</button>
+    <button class="btn btn-outline btn-sm" onclick="toggleEdit('${id}')">Cancelar</button>
+  `;
+  box.classList.remove('hidden');
+  document.getElementById(`e-foto-${id}`).addEventListener('change', e=>{
+    const file = e.target.files[0];
+    const wrap = document.getElementById(`e-foto-preview-wrap-${id}`);
+    const img = document.getElementById(`e-foto-preview-${id}`);
+    if(!file){ wrap.classList.add('hidden'); return; }
+    const reader = new FileReader();
+    reader.onload = ev => { img.src = ev.target.result; wrap.classList.remove('hidden'); };
+    reader.readAsDataURL(file);
+  });
+}
+
+async function saveEdit(id){
+  const categoria = document.getElementById(`e-cat-${id}`).value.trim();
+  const numero = document.getElementById(`e-num-${id}`).value.trim();
+  const titulo = document.getElementById(`e-tit-${id}`).value.trim();
+  const descricao = document.getElementById(`e-desc-${id}`).value.trim();
+  const condicao = document.getElementById(`e-cond-${id}`).value.trim();
+  const preco = parseFloat(document.getElementById(`e-preco-${id}`).value);
+  const fotoFile = document.getElementById(`e-foto-${id}`)?.files[0];
+  if(!numero || !titulo || !preco || preco<=0 || !categoria){ showToast('Preencha todos os campos corretamente.'); return; }
+
+  try{
+    const payload = { categoria, numero, titulo, descricao, condicao: condicao || null, preco };
+    if(fotoFile){
+      showToast('Enviando foto...');
+      payload.fotoUrl = await uploadFoto(fotoFile);
+    }
+    const res = await fetch('/api/catalog/' + encodeURIComponent(id), {
+      method: 'PATCH', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if(!res.ok) throw new Error(data.error || 'Falha ao atualizar item.');
+
+    await loadCatalog();
+    buildChips(); renderGrid(); renderManageList();
+    showToast('Item atualizado!');
+  } catch(err){
+    console.error('Erro ao atualizar item', err);
+    showToast('Não foi possível salvar: ' + err.message);
+  }
+}
+
+async function removeItem(id){
+  if(!confirm('Remover este item do catálogo?')) return;
+  try{
+    const res = await fetch('/api/catalog/' + encodeURIComponent(id), { method: 'DELETE' });
+    const data = await res.json();
+    if(!res.ok) throw new Error(data.error || 'Falha ao remover item.');
+
+    await loadCatalog();
+    buildChips(); renderGrid(); renderManageList();
+    showToast('Item removido do catálogo.');
+  } catch(err){
+    console.error('Erro ao remover item', err);
+    showToast('Não foi possível remover: ' + err.message);
+  }
+}
+
+/* ============ INIT ============ */
+(async function init(){
+  try{
+    await loadCatalog();
+  } catch(err){
+    console.error('Erro ao carregar catálogo', err);
+    document.getElementById('resultCount').textContent = 'Não foi possível carregar o catálogo. Verifique se o Supabase está configurado.';
+  }
+  buildChips();
+  renderGrid();
+  renderCartBar();
+})();
+</script>
+</body>
+</html>
