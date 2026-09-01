@@ -585,6 +585,23 @@ if(!STAFF_MODE){
   if(btnAdmin) btnAdmin.style.display = 'none';
 }
 
+/* ============ PAGAMENTO ============ */
+// Mesma chave que consta na Nota de Débito (CNPJ da filial 0002-89)
+const CHAVE_PIX = '05.949.989/0002-89';
+
+function copiarChavePix(btn){
+  const digitos = CHAVE_PIX.replace(/\D/g,'');
+  const done = () => {
+    showToast('Chave Pix copiada! ✓');
+    if(btn){ const orig = btn.textContent; btn.textContent = 'Copiada ✓'; setTimeout(()=>{ btn.textContent = orig; }, 2000); }
+  };
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(digitos).then(done).catch(()=>{ prompt('Copie a chave Pix:', digitos); });
+  } else {
+    prompt('Copie a chave Pix:', digitos);
+  }
+}
+
 /* ============ CATÁLOGO (agora vem do banco via API) ============ */
 let effectiveCatalog = [];
 let cart = []; // {itemId, quantidade}
@@ -750,7 +767,7 @@ function renderReservaForm(){
       <div class="field">
         <label>Forma de pagamento</label>
         <div class="radio-group">
-          <div class="radio-opt sel" id="optPix"><span class="t">Pix</span><span class="s">Pagamento à vista</span></div>
+          <div class="radio-opt sel" id="optPix"><span class="t">Pix</span><span class="s">Pagamento à vista · Chave (CNPJ): ${CHAVE_PIX}</span></div>
         </div>
       </div>
       <div id="simBox"></div>
@@ -850,9 +867,15 @@ function renderConfirmation(c){
       <div style="text-align:left;">${itemsHtml}</div>
       <p style="font-size:13px;color:var(--ink-soft);margin-top:10px;">Total: <b>${brl(c.valorTotal)}</b></p>
       ${c.pagamento==='Pix' ? `<div style="margin-top:6px;">
+        <div class="sim-box sim-ok" style="text-align:left;margin-bottom:10px;">
+          <b>Pague agora via Pix</b><br>
+          Chave (CNPJ): <b class="mono">${CHAVE_PIX}</b>
+          <button class="btn btn-outline btn-sm" style="margin-left:6px;" onclick="copiarChavePix(this)">Copiar chave</button><br>
+          Valor: <b>${brl(c.valorTotal)}</b>
+        </div>
         <button class="btn btn-primary" id="btnAnexoConfirm" onclick="document.getElementById('cmpConfirm').click()">📎 Anexar comprovante do Pix</button>
         <input type="file" id="cmpConfirm" accept="image/*,application/pdf" style="display:none;" onchange="enviarComprovante('${c.protocolo}','${esc(c.matricula||'')}', this)">
-        <p style="font-size:11.5px;color:var(--ink-soft);margin-top:6px;">Se já fez o Pix, anexe o comprovante aqui — a TI é avisada na hora.</p>
+        <p style="font-size:11.5px;color:var(--ink-soft);margin-top:6px;">Pagou? Anexe o comprovante aqui — a TI é avisada na hora.</p>
       </div>` : ''}
       <p id="imgError" class="hidden" style="color:var(--danger);font-size:12px;margin-top:8px;"></p>
     </div>
@@ -987,7 +1010,8 @@ async function renderMeusChamados(){
         <div class="meta">${esc(c.pagamento)}${c.parcelas ? ' · '+c.parcelas+'x de '+brl(c.valorParcela) : ''} · ${new Date(c.dataAbertura).toLocaleDateString('pt-BR')}</div>
         <div class="items-list">${c.itens.map(it=>`Nº ${esc(it.numero)} — ${esc(it.titulo)} (${it.quantidade}x)`).join(' · ')}</div>
         <div style="margin-top:8px;" class="val">Total: ${brl(c.valorTotal)}</div>
-        ${c.status==='Aguardando pagamento Pix' ? `<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
+        ${c.status==='Aguardando pagamento Pix' ? `<div style="margin-top:8px;font-size:12px;color:var(--ink-soft);">Chave Pix (CNPJ): <b class="mono">${CHAVE_PIX}</b> · Valor: <b>${brl(c.valorTotal)}</b></div>
+        <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">
           <button class="btn btn-primary btn-sm" onclick="document.getElementById('cmp-${c.protocolo}').click()">📎 Anexar comprovante do Pix</button>
           <button class="btn btn-outline btn-sm" onclick="informarPix('${c.protocolo}','${esc(c.matricula||'')}')">Já fiz o Pix (sem comprovante)</button>
           <input type="file" id="cmp-${c.protocolo}" accept="image/*,application/pdf" style="display:none;" onchange="enviarComprovante('${c.protocolo}','${esc(c.matricula||'')}', this)">
