@@ -63,6 +63,13 @@ export default async function handler(req, res) {
       .single();
     if (getErr || !chamado) return res.status(404).json({ error: 'Chamado não encontrado.' });
 
+    // Trava contra clique duplo / reprocessamento: chamado finalizado não muda
+    // mais de status (evita somar venda ou devolver estoque em dobro).
+    const FINALIZADOS = ['Concluído', 'Cancelado', 'Reprovado pelo DP'];
+    if (FINALIZADOS.includes(chamado.status)) {
+      return res.status(409).json({ error: `Esse chamado já foi finalizado (${chamado.status}).` });
+    }
+
     const { data: itens, error: itensErr } = await supabase
       .from('chamado_itens')
       .select('*')
