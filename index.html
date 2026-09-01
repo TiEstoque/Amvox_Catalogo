@@ -181,6 +181,8 @@
   .subtab-btn.active{color:var(--primary);border-bottom-color:var(--accent);}
 
   .dp-summary{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:20px;}
+  .vendas-cards{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;}
+  @media(max-width:900px){.vendas-cards{grid-template-columns:repeat(2,1fr);}}
   @media(max-width:900px){.dp-summary{grid-template-columns:repeat(2,1fr);}}
   .dp-stat{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px;}
   .dp-stat .n{font-family:'Space Grotesk';font-weight:700;font-size:23px;}
@@ -345,6 +347,7 @@
         <button class="subtab-btn active" data-sub="chamados" onclick="switchAdminSub('chamados')">Chamados / Reservas</button>
         <button class="subtab-btn" data-sub="catalogo" onclick="switchAdminSub('catalogo')">Gerenciar catálogo</button>
         <button class="subtab-btn" data-sub="usuarios" onclick="switchAdminSub('usuarios')">Usuários</button>
+        <button class="subtab-btn" data-sub="vendas" onclick="switchAdminSub('vendas')">Vendas</button>
       </div>
 
       <!-- Sub: Chamados -->
@@ -405,6 +408,18 @@
         </div>
         <div id="userList"></div>
         <div class="empty hidden" id="userEmpty"><div class="big">👤</div>Nenhum usuário encontrado.</div>
+      </div>
+
+      <!-- Sub: Vendas -->
+      <div id="admin-sub-vendas" class="hidden">
+        <div class="vendas-cards" id="vendasCards"></div>
+        <div class="form-card" style="padding:18px 22px;">
+          <h2>Vendas por categoria</h2>
+          <div id="vendasCategorias"></div>
+        </div>
+        <h2 style="font-size:17px;margin:0 0 10px;">Vendas concluídas</h2>
+        <div id="vendasLista"></div>
+        <div class="empty hidden" id="vendasVazio"><div class="big">💰</div>Nenhuma venda concluída ainda.</div>
       </div>
     </div>
   </section>
@@ -1171,9 +1186,66 @@ function switchAdminSub(name){
   document.getElementById('admin-sub-chamados').classList.toggle('hidden', name!=='chamados');
   document.getElementById('admin-sub-catalogo').classList.toggle('hidden', name!=='catalogo');
   document.getElementById('admin-sub-usuarios').classList.toggle('hidden', name!=='usuarios');
+  document.getElementById('admin-sub-vendas').classList.toggle('hidden', name!=='vendas');
   if(name==='chamados') renderDP();
   else if(name==='catalogo') renderManageList();
-  else renderUsuarios();
+  else if(name==='usuarios') renderUsuarios();
+  else renderVendas();
+}
+
+/* ============ VENDAS (dashboard) ============ */
+async function renderVendas(){
+  try{
+    const res = await fetch('/api/reservas', { headers: adminHeaders() });
+    const data = await res.json();
+    if(!res.ok) throw new Error(data.error || 'Falha ao carregar vendas.');
+    const todos = data.chamados || [];
+    const vendas = todos.filter(c=>c.status==='Concluído');
+    const abertos = todos.filter(c=>!['Concluído','Cancelado','Reprovado pelo DP'].includes(c.status));
+
+    const totalVendido = vendas.reduce((a,c)=>a+c.valorTotal,0);
+    const unidades = vendas.reduce((a,c)=>a+c.itens.reduce((x,i)=>x+i.quantidade,0),0);
+    const emAberto = abertos.reduce((a,c)=>a+c.valorTotal,0);
+    const ticket = vendas.length ? totalVendido/vendas.length : 0;
+
+    document.getElementById('vendasCards').innerHTML = `
+      <div class="dp-stat"><div class="n" style="color:var(--success);">${brl(totalVendido)}</div><div class="l">Total vendido</div></div>
+      <div class="dp-stat"><div class="n">${vendas.length} <small style="font-size:12px;color:var(--ink-soft);">(${unidades} itens)</small></div><div class="l">Vendas concluídas</div></div>
+      <div class="dp-stat"><div class="n">${brl(ticket)}</div><div class="l">Ticket médio</div></div>
+      <div class="dp-stat"><div class="n" style="color:var(--warning);">${brl(emAberto)}</div><div class="l">Em aberto (reservas ativas)</div></div>
+    `;
+
+    const porCat = {};
+    vendas.forEach(c=>c.itens.forEach(i=>{
+      const k = i.categoria || 'Outros';
+      porCat[k] = porCat[k] || { qtd: 0, valor: 0 };
+      porCat[k].qtd += i.quantidade;
+      porCat[k].valor += i.preco * i.quantidade;
+    }));
+    const cats = Object.entries(porCat).sort((a,b)=>b[1].valor-a[1].valor);
+    document.getElementById('vendasCategorias').innerHTML = cats.length ? cats.map(([k,v])=>`
+      <div class="cart-line">
+        <div><div class="l1">${esc(k)}</div><div class="l2">${v.qtd} ${v.qtd===1?'unidade':'unidades'}</div></div>
+        <div><b>${brl(v.valor)}</b></div>
+      </div>
+    `).join('') : '<p style="color:var(--ink-soft);font-size:13px;margin:0;">Nenhuma venda ainda.</p>';
+
+    const orden = vendas.slice().sort((a,b)=>new Date(b.dataAbertura)-new Date(a.dataAbertura));
+    document.getElementById('vendasVazio').classList.toggle('hidden', vendas.length>0);
+    document.getElementById('vendasLista').innerHTML = orden.map(c=>`
+      <div class="ticket">
+        <div class="ticket-top">
+          <div><span class="mono" style="font-size:11.5px;color:var(--ink-soft);">${c.protocolo}</span> <strong style="margin-left:8px;">${esc(c.nome)}</strong></div>
+          <div class="val">${brl(c.valorTotal)}</div>
+        </div>
+        <div class="items-list">${c.itens.map(it=>`Nº ${esc(it.numero)} — ${esc(it.titulo)} (${it.quantidade}x)`).join(' · ')}</div>
+        <div class="meta" style="margin-top:4px;">Aberto em ${new Date(c.dataAbertura).toLocaleDateString('pt-BR')} · ${esc(c.setor||'—')}</div>
+      </div>
+    `).join('');
+  } catch(err){
+    console.error('Erro ao carregar vendas', err);
+    showToast(err.message || 'Não foi possível carregar as vendas.');
+  }
 }
 async function refreshAdmin(){
   try{ await loadCatalog(); } catch(e){ console.error(e); }
