@@ -312,7 +312,7 @@
     <div class="info-strip">
       <div class="info-item">
         <div class="info-icon">🛒</div>
-        <div><h3>Até 4 itens por reserva</h3><p>Escolha seus itens (máximo de 4 por vez) e finalize numa reserva só. Depois, não esqueça de abrir o chamado no Gestão.</p></div>
+        <div><h3>Até 3 itens por pessoa</h3><p>Escolha seus itens (máximo de <b>3 por pessoa</b>, somando reservas e compras anteriores) e finalize numa reserva só. Depois, não esqueça de abrir o chamado no Gestão.</p></div>
       </div>
       <div class="info-item">
         <div class="info-icon">🔒</div>
@@ -704,7 +704,7 @@ function buildChips(){
 document.getElementById('searchInput').addEventListener('input', e=>{ searchTerm = e.target.value.trim().toLowerCase(); renderGrid(); });
 
 function cartQty(itemId){ const l = cart.find(c=>c.itemId===itemId); return l ? l.quantidade : 0; }
-const LIMITE_POR_RESERVA = 4;
+const LIMITE_POR_RESERVA = 3;
 function maxQtyFor(item){ return Math.min(item.isStock ? item.availableQty : (item.disponivel ? 1 : 0), LIMITE_POR_RESERVA); }
 
 function changeCartQty(itemId, delta){

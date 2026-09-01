@@ -102,11 +102,39 @@ export default async function handler(req, res) {
         linhas.push({ item, qty, isStock });
       }
 
-      // Limite: máximo 4 itens por reserva.
-      const LIMITE_POR_RESERVA = 4;
+      // Limite: máximo 3 itens por pessoa (por CPF), somando reservas ativas e
+      // compras concluídas — sair e reservar de novo não burla o limite.
+      // Chamado cancelado/reprovado/expirado devolve o direito.
+      const LIMITE_POR_PESSOA = 3;
+      const cpfLimpo = String(matricula).replace(/\D/g, '');
       const qtdNova = linhas.reduce((a, l) => a + l.qty, 0);
-      if (qtdNova > LIMITE_POR_RESERVA) {
-        return res.status(400).json({ error: `Limite: no máximo ${LIMITE_POR_RESERVA} itens por reserva.` });
+      if (qtdNova > LIMITE_POR_PESSOA) {
+        return res.status(400).json({ error: `Limite: no máximo ${LIMITE_POR_PESSOA} itens por pessoa.` });
+      }
+
+      const { data: chamadosPessoa, error: cpErr } = await supabase
+        .from('chamados')
+        .select('protocolo, matricula, status');
+      if (cpErr) throw cpErr;
+      const protocolosPessoa = (chamadosPessoa || [])
+        .filter((c) => String(c.matricula || '').replace(/\D/g, '') === cpfLimpo)
+        .filter((c) => !['Cancelado', 'Reprovado pelo DP'].includes(c.status))
+        .map((c) => c.protocolo);
+
+      let qtdExistente = 0;
+      if (protocolosPessoa.length) {
+        const { data: itensPessoa, error: ipErr } = await supabase
+          .from('chamado_itens')
+          .select('quantidade')
+          .in('chamado_protocolo', protocolosPessoa);
+        if (ipErr) throw ipErr;
+        qtdExistente = (itensPessoa || []).reduce((a, it) => a + it.quantidade, 0);
+      }
+
+      if (qtdExistente + qtdNova > LIMITE_POR_PESSOA) {
+        return res.status(400).json({
+          error: `Limite de ${LIMITE_POR_PESSOA} itens por pessoa: você já tem ${qtdExistente} entre reservas e compras. Dúvidas? Procure a TI.`,
+        });
       }
 
       const parcelasNum = null;
