@@ -181,8 +181,27 @@
   .subtab-btn.active{color:var(--primary);border-bottom-color:var(--accent);}
 
   .dp-summary{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:20px;}
-  .vendas-cards{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:20px;}
+  .vendas-cards{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px;}
   @media(max-width:900px){.vendas-cards{grid-template-columns:repeat(2,1fr);}}
+  .viz-card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:18px 22px;margin-bottom:16px;}
+  .viz-card h2{font-size:15px;margin:0 0 14px;}
+  .viz-grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+  @media(max-width:900px){.viz-grid2{grid-template-columns:1fr;}}
+  .stackbar{display:flex;height:26px;border-radius:6px;overflow:hidden;gap:2px;}
+  .stackbar div{min-width:3px;}
+  .viz-legend{display:flex;gap:18px;flex-wrap:wrap;margin-top:10px;font-size:12px;color:var(--ink-soft);}
+  .viz-legend .sw{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px;}
+  .hbar-row{display:grid;grid-template-columns:130px 1fr 80px;align-items:center;gap:10px;margin-bottom:8px;font-size:12.5px;}
+  .hbar-row .nome{color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .hbar-fill{height:14px;background:#A31621;border-radius:0 4px 4px 0;min-width:3px;}
+  .hbar-val{text-align:right;font-weight:600;color:var(--ink);font-size:12px;}
+  .dias-chart{display:flex;align-items:flex-end;gap:4px;height:130px;}
+  .dia-col{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:4px;min-width:0;height:100%;}
+  .dia-bar{width:70%;max-width:26px;background:#A31621;border-radius:4px 4px 0 0;}
+  .dia-col.zero .dia-bar{background:var(--line);}
+  .dia-lbl{font-size:9.5px;color:var(--ink-soft);white-space:nowrap;}
+  .dia-val{font-size:9.5px;font-weight:700;color:var(--ink);height:12px;white-space:nowrap;}
+  .viz-tip{position:fixed;background:var(--primary-deep);color:#fff;font-size:12px;padding:6px 10px;border-radius:7px;pointer-events:none;opacity:0;transition:opacity .12s;z-index:300;white-space:nowrap;}
   @media(max-width:900px){.dp-summary{grid-template-columns:repeat(2,1fr);}}
   .dp-stat{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px;}
   .dp-stat .n{font-family:'Space Grotesk';font-weight:700;font-size:23px;}
@@ -413,11 +432,20 @@
       <!-- Sub: Vendas -->
       <div id="admin-sub-vendas" class="hidden">
         <div class="vendas-cards" id="vendasCards"></div>
-        <div class="form-card" style="padding:18px 22px;">
-          <h2>Vendas por categoria</h2>
-          <div id="vendasCategorias"></div>
+        <div class="viz-card">
+          <h2>Composição do valor total</h2>
+          <div class="stackbar" id="vizStack"></div>
+          <div class="viz-legend" id="vizStackLegend"></div>
         </div>
-        <h2 style="font-size:17px;margin:0 0 10px;">Vendas concluídas</h2>
+        <div class="viz-card">
+          <h2>Vendas por dia — últimos 14 dias (R$)</h2>
+          <div class="dias-chart" id="vizDias"></div>
+        </div>
+        <div class="viz-grid2">
+          <div class="viz-card"><h2>Vendas por categoria</h2><div id="vizCategorias"></div></div>
+          <div class="viz-card"><h2>Top compradores</h2><div id="vizCompradores"></div></div>
+        </div>
+        <h2 style="font-size:17px;margin:16px 0 10px;">Vendas concluídas</h2>
         <div id="vendasLista"></div>
         <div class="empty hidden" id="vendasVazio"><div class="big">💰</div>Nenhuma venda concluída ainda.</div>
       </div>
@@ -438,6 +466,7 @@
 <div class="overlay hidden" id="modalOverlay"><div class="modal" id="modalContent"></div></div>
 
 <div class="toast" id="toast"></div>
+<div class="viz-tip" id="vizTip"></div>
 
 <script>
 /* ============ AUTENTICAÇÃO DO PAINEL ADMIN (server-side) ============ */
@@ -1193,6 +1222,37 @@ function switchAdminSub(name){
 }
 
 /* ============ VENDAS (dashboard) ============ */
+// Paleta validada (banda de luminosidade, croma, separação CVD e contraste)
+const VIZ_COR = { vendido:'#178A54', aberto:'#B45309', estoque:'#2160A5' };
+
+function vizTipOn(el, texto){
+  if(!el) return;
+  el.style.cursor = 'default';
+  el.addEventListener('mousemove', e=>{
+    const tip = document.getElementById('vizTip');
+    tip.textContent = texto;
+    tip.style.left = Math.min(e.clientX + 12, window.innerWidth - 180) + 'px';
+    tip.style.top = (e.clientY - 34) + 'px';
+    tip.style.opacity = '1';
+  });
+  el.addEventListener('mouseleave', ()=>{ document.getElementById('vizTip').style.opacity = '0'; });
+}
+
+function vizBarras(containerId, linhas){
+  const wrap = document.getElementById(containerId);
+  if(!wrap) return;
+  const max = Math.max(...linhas.map(l=>l.valor), 1);
+  wrap.innerHTML = linhas.length ? linhas.map((l,i)=>`
+    <div class="hbar-row">
+      <div class="nome" title="${esc(l.nome)}">${esc(l.nome)}</div>
+      <div><div class="hbar-fill" id="${containerId}-b${i}" style="width:${Math.max(3,(l.valor/max)*100)}%;"></div></div>
+      <div class="hbar-val">${brl(l.valor)}</div>
+    </div>
+  `).join('') : '<p style="color:var(--ink-soft);font-size:13px;margin:0;">Sem vendas ainda.</p>';
+  linhas.forEach((l,i)=>vizTipOn(document.getElementById(`${containerId}-b${i}`),
+    `${l.nome}: ${brl(l.valor)}${l.extra ? ' · ' + l.extra : ''}`));
+}
+
 async function renderVendas(){
   try{
     const [res, resCat] = await Promise.all([
@@ -1222,6 +1282,40 @@ async function renderVendas(){
       <div class="dp-stat"><div class="n" style="color:#1D4E89;">${brl(estoqueValor)}</div><div class="l">Em estoque (a vender)</div></div>
     `;
 
+    // Composição do valor total (barra empilhada)
+    const composicao = [
+      { k: 'Vendido', v: totalVendido, cor: VIZ_COR.vendido },
+      { k: 'Em aberto', v: emAberto, cor: VIZ_COR.aberto },
+      { k: 'Em estoque', v: estoqueValor, cor: VIZ_COR.estoque },
+    ];
+    const somaComp = composicao.reduce((a,c)=>a+c.v,0) || 1;
+    document.getElementById('vizStack').innerHTML = composicao.filter(c=>c.v>0).map((c,i)=>
+      `<div style="flex:${c.v} 0 0;background:${c.cor};" id="viz-seg-${i}"></div>`).join('');
+    composicao.filter(c=>c.v>0).forEach((c,i)=>vizTipOn(document.getElementById('viz-seg-'+i),
+      `${c.k}: ${brl(c.v)} (${Math.round(c.v/somaComp*100)}%)`));
+    document.getElementById('vizStackLegend').innerHTML = composicao.map(c=>
+      `<span><span class="sw" style="background:${c.cor};"></span>${c.k}: <b style="color:var(--ink);">${brl(c.v)}</b></span>`).join('');
+
+    // Vendas por dia (últimos 14 dias)
+    const hoje = new Date(); hoje.setHours(12,0,0,0);
+    const dias = [];
+    for(let i=13;i>=0;i--) dias.push(new Date(hoje.getTime() - i*86400000));
+    const chaveDia = d => d.toISOString().slice(0,10);
+    const porDia = {};
+    vendas.forEach(c=>{ const k = String(c.dataAbertura).slice(0,10); porDia[k] = (porDia[k]||0) + c.valorTotal; });
+    const maxDia = Math.max(...dias.map(d=>porDia[chaveDia(d)]||0), 1);
+    document.getElementById('vizDias').innerHTML = dias.map((d,i)=>{
+      const v = porDia[chaveDia(d)] || 0;
+      return `<div class="dia-col ${v ? '' : 'zero'}">
+        <div class="dia-val">${v ? 'R$ ' + Math.round(v) : ''}</div>
+        <div class="dia-bar" id="viz-dia-${i}" style="height:${v ? Math.max(8, Math.round(v/maxDia*84)) : 3}px;"></div>
+        <div class="dia-lbl">${d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})}</div>
+      </div>`;
+    }).join('');
+    dias.forEach((d,i)=>vizTipOn(document.getElementById('viz-dia-'+i),
+      `${d.toLocaleDateString('pt-BR')}: ${brl(porDia[chaveDia(d)]||0)}`));
+
+    // Vendas por categoria (barras horizontais)
     const porCat = {};
     vendas.forEach(c=>c.itens.forEach(i=>{
       const k = i.categoria || 'Outros';
@@ -1229,13 +1323,16 @@ async function renderVendas(){
       porCat[k].qtd += i.quantidade;
       porCat[k].valor += i.preco * i.quantidade;
     }));
-    const cats = Object.entries(porCat).sort((a,b)=>b[1].valor-a[1].valor);
-    document.getElementById('vendasCategorias').innerHTML = cats.length ? cats.map(([k,v])=>`
-      <div class="cart-line">
-        <div><div class="l1">${esc(k)}</div><div class="l2">${v.qtd} ${v.qtd===1?'unidade':'unidades'}</div></div>
-        <div><b>${brl(v.valor)}</b></div>
-      </div>
-    `).join('') : '<p style="color:var(--ink-soft);font-size:13px;margin:0;">Nenhuma venda ainda.</p>';
+    vizBarras('vizCategorias', Object.entries(porCat)
+      .map(([nome,v])=>({ nome, valor: v.valor, extra: `${v.qtd} ${v.qtd===1?'unidade':'unidades'}` }))
+      .sort((a,b)=>b.valor-a.valor));
+
+    // Top compradores (barras horizontais)
+    const porPessoa = {};
+    vendas.forEach(c=>{ const k = c.nome || '—'; porPessoa[k] = (porPessoa[k]||0) + c.valorTotal; });
+    vizBarras('vizCompradores', Object.entries(porPessoa)
+      .map(([nome,valor])=>({ nome, valor }))
+      .sort((a,b)=>b.valor-a.valor).slice(0,5));
 
     const orden = vendas.slice().sort((a,b)=>new Date(b.dataAbertura)-new Date(a.dataAbertura));
     document.getElementById('vendasVazio').classList.toggle('hidden', vendas.length>0);
