@@ -102,6 +102,58 @@ export default async function handler(req, res) {
         linhas.push({ item, qty, isStock });
       }
 
+      // Limite por pessoa (por CPF): máximo 3 itens no total e 2 do mesmo item,
+      // somando reservas ativas e compras concluídas (cancelado/reprovado não conta).
+      const LIMITE_TOTAL = 3;
+      const LIMITE_POR_ITEM = 2;
+      const cpfLimpo = String(matricula).replace(/\D/g, '');
+      const qtdNova = linhas.reduce((a, l) => a + l.qty, 0);
+      if (qtdNova > LIMITE_TOTAL) {
+        return res.status(400).json({ error: `Limite por pessoa: no máximo ${LIMITE_TOTAL} itens no total.` });
+      }
+      for (const l of linhas) {
+        if (l.qty > LIMITE_POR_ITEM) {
+          return res.status(400).json({ error: `Limite por pessoa: no máximo ${LIMITE_POR_ITEM} unidades de "${l.item.titulo}".` });
+        }
+      }
+
+      const { data: chamadosPessoa, error: cpErr } = await supabase
+        .from('chamados')
+        .select('protocolo, matricula, status');
+      if (cpErr) throw cpErr;
+      const protocolosPessoa = (chamadosPessoa || [])
+        .filter((c) => String(c.matricula || '').replace(/\D/g, '') === cpfLimpo)
+        .filter((c) => !['Cancelado', 'Reprovado pelo DP'].includes(c.status))
+        .map((c) => c.protocolo);
+
+      let qtdExistente = 0;
+      const porItemExistente = {};
+      if (protocolosPessoa.length) {
+        const { data: itensPessoa, error: ipErr } = await supabase
+          .from('chamado_itens')
+          .select('item_id, quantidade')
+          .in('chamado_protocolo', protocolosPessoa);
+        if (ipErr) throw ipErr;
+        for (const it of itensPessoa || []) {
+          qtdExistente += it.quantidade;
+          porItemExistente[it.item_id] = (porItemExistente[it.item_id] || 0) + it.quantidade;
+        }
+      }
+
+      if (qtdExistente + qtdNova > LIMITE_TOTAL) {
+        return res.status(400).json({
+          error: `Limite por pessoa: no máximo ${LIMITE_TOTAL} itens no total entre reservas e compras — você já tem ${qtdExistente}. Dúvidas? Procure a TI.`,
+        });
+      }
+      for (const l of linhas) {
+        const jaTem = porItemExistente[l.item.id] || 0;
+        if (jaTem + l.qty > LIMITE_POR_ITEM) {
+          return res.status(400).json({
+            error: `Limite por pessoa: no máximo ${LIMITE_POR_ITEM} unidades de "${l.item.titulo}" — você já tem ${jaTem}.`,
+          });
+        }
+      }
+
       const parcelasNum = null;
       const valorParcela = null;
       const status = 'Aguardando pagamento Pix';

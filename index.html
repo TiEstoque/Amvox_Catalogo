@@ -291,7 +291,7 @@
     <div class="info-strip">
       <div class="info-item">
         <div class="info-icon">🛒</div>
-        <div><h3>Selecione quantos itens quiser</h3><p>Marque tudo que precisa e finalize numa reserva só. Após finalizar a reserva, não esqueça de abrir o chamado no Gestão.</p></div>
+        <div><h3>Até 3 itens por pessoa</h3><p>Escolha seus itens (máximo de 2 iguais e 3 no total, somando suas reservas anteriores) e finalize numa reserva só. Depois, não esqueça de abrir o chamado no Gestão.</p></div>
       </div>
       <div class="info-item">
         <div class="info-icon">🔒</div>
@@ -660,11 +660,17 @@ function buildChips(){
 document.getElementById('searchInput').addEventListener('input', e=>{ searchTerm = e.target.value.trim().toLowerCase(); renderGrid(); });
 
 function cartQty(itemId){ const l = cart.find(c=>c.itemId===itemId); return l ? l.quantidade : 0; }
-function maxQtyFor(item){ return item.isStock ? item.availableQty : (item.disponivel ? 1 : 0); }
+const LIMITE_TOTAL_PESSOA = 3;
+const LIMITE_POR_ITEM = 2;
+function maxQtyFor(item){ return Math.min(item.isStock ? item.availableQty : (item.disponivel ? 1 : 0), LIMITE_POR_ITEM); }
 
 function changeCartQty(itemId, delta){
   const item = effectiveCatalog.find(i=>i.id===itemId);
   if(!item) return;
+  if(delta > 0 && cart.reduce((a,c)=>a+c.quantidade,0) >= LIMITE_TOTAL_PESSOA){
+    showToast(`Máximo de ${LIMITE_TOTAL_PESSOA} itens por pessoa.`);
+    return;
+  }
   let line = cart.find(c=>c.itemId===itemId);
   let qty = (line ? line.quantidade : 0) + delta;
   const max = maxQtyFor(item);
