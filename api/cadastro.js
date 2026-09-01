@@ -44,7 +44,7 @@ module.exports = async (req, res) => {
 
       const { data: contas, error: loginErr } = await supabase
         .from('cadastros_acesso')
-        .select('nome, cpf, setor, senha_hash')
+        .select('nome, cpf, setor, senha_hash, bloqueado')
         .eq('email', emailLogin);
       if (loginErr) throw loginErr;
 
@@ -53,6 +53,10 @@ module.exports = async (req, res) => {
         // pequeno atraso proposital, dificulta tentativa por força bruta
         await new Promise((r) => setTimeout(r, 400));
         res.status(401).json({ error: 'Email ou senha incorretos. Se esqueceu a senha, procure a TI.' });
+        return;
+      }
+      if (conta.bloqueado) {
+        res.status(403).json({ error: 'Acesso bloqueado. Procure a TI.' });
         return;
       }
 
@@ -95,7 +99,7 @@ module.exports = async (req, res) => {
 
     const { data: existing, error: selErr } = await supabase
       .from('cadastros_acesso')
-      .select('senha_hash')
+      .select('senha_hash, bloqueado')
       .eq('cpf', cpfLimpo)
       .maybeSingle();
     if (selErr) throw selErr;
@@ -104,6 +108,10 @@ module.exports = async (req, res) => {
       // CPF já cadastrado -> precisa bater a senha
       if (!verifyPassword(senha, existing.senha_hash)) {
         res.status(401).json({ error: 'Senha incorreta para esse CPF. Se esqueceu, procure a TI.' });
+        return;
+      }
+      if (existing.bloqueado) {
+        res.status(403).json({ error: 'Acesso bloqueado. Procure a TI.' });
         return;
       }
       const { error } = await supabase

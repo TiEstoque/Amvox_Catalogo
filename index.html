@@ -43,7 +43,7 @@
   .hidden{display:none !important;}
 
   .info-strip{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:18px 22px;margin-bottom:24px;
-    display:grid;grid-template-columns:repeat(3,1fr);gap:20px;}
+    display:grid;grid-template-columns:repeat(2,1fr);gap:20px;}
   @media(max-width:760px){.info-strip{grid-template-columns:1fr;}}
   .info-item{display:flex;gap:12px;align-items:flex-start;}
   .info-icon{width:34px;height:34px;border-radius:9px;background:var(--tag-bg);border:1px solid #F0C7CB;display:flex;
@@ -294,10 +294,6 @@
         <div><h3>Selecione quantos itens quiser</h3><p>Marque tudo que precisa e finalize numa reserva só. Após finalizar a reserva, não esqueça de abrir o chamado no Gestão.</p></div>
       </div>
       <div class="info-item">
-        <div class="info-icon">📊</div>
-        <div><h3>Avaliação do DP</h3><p>Toda compra em crédito em folha passa por avaliação do Departamento Pessoal antes de ser liberada. Se o DP retornar que o associado não tem mais espaço na folha, o pagamento terá que ser feito via Pix — nesse caso, será necessário abrir um novo chamado para o setor de Faturamento, onde o mesmo irá te passar a chave Pix para o pagamento.</p></div>
-      </div>
-      <div class="info-item">
         <div class="info-icon">🔒</div>
         <div><h3>Reserva automática</h3><p>Ao abrir o chamado, o item já fica reservado — evita que duas pessoas peçam a mesma coisa.</p></div>
       </div>
@@ -348,6 +344,7 @@
       <div class="subtabs">
         <button class="subtab-btn active" data-sub="chamados" onclick="switchAdminSub('chamados')">Chamados / Reservas</button>
         <button class="subtab-btn" data-sub="catalogo" onclick="switchAdminSub('catalogo')">Gerenciar catálogo</button>
+        <button class="subtab-btn" data-sub="usuarios" onclick="switchAdminSub('usuarios')">Usuários</button>
       </div>
 
       <!-- Sub: Chamados -->
@@ -395,6 +392,19 @@
           <div class="search-box" style="max-width:280px;"><input type="text" id="manageSearch" placeholder="Buscar item..."></div>
         </div>
         <div id="manageList"></div>
+      </div>
+
+      <!-- Sub: Usuários -->
+      <div id="admin-sub-usuarios" class="hidden">
+        <div class="panel-head">
+          <div>
+            <h2 style="font-size:17px;margin:0;">Usuários cadastrados</h2>
+            <p style="color:var(--ink-soft);font-size:12.8px;margin:4px 0 0;">Troque a senha, bloqueie ou exclua cadastros de associados. Bloqueado não consegue entrar no catálogo.</p>
+          </div>
+          <div class="search-box" style="max-width:280px;"><input type="text" id="userSearch" placeholder="Buscar por nome, email ou CPF..."></div>
+        </div>
+        <div id="userList"></div>
+        <div class="empty hidden" id="userEmpty"><div class="big">👤</div>Nenhum usuário encontrado.</div>
       </div>
     </div>
   </section>
@@ -548,11 +558,11 @@ function openTermosGate(e){
   modalContent.innerHTML = `
     <div class="modal-head"><h2>Termos e Condições</h2></div>
     <div class="modal-body" style="font-size:13px;line-height:1.65;color:var(--ink-soft);">
-      <p><b style="color:var(--ink);">1. Objetivo.</b> Este catálogo destina-se exclusivamente à reserva de itens de TI por colaboradores da Amvox, para aquisição via Pix ou crédito em folha, mediante avaliação do Departamento Pessoal (DP).</p>
+      <p><b style="color:var(--ink);">1. Objetivo.</b> Este catálogo destina-se exclusivamente à reserva de itens de TI por colaboradores da Amvox, para aquisição via Pix (pagamento à vista).</p>
       <p><b style="color:var(--ink);">2. Dados coletados.</b> Nome, email e CPF são coletados para identificação do colaborador e vinculação das reservas realizadas, conforme a Lei Geral de Proteção de Dados Pessoais (Lei nº 13.709/2018).</p>
       <p><b style="color:var(--ink);">3. Reserva de itens.</b> Ao selecionar um item e abrir um chamado, o item fica automaticamente reservado, sujeito à disponibilidade em estoque no momento da confirmação.</p>
-      <p><b style="color:var(--ink);">4. Aprovação do DP.</b> Compras via crédito em folha passam por avaliação do DP. Caso não haja espaço disponível na folha, o pagamento deverá ser feito via Pix, mediante abertura de novo chamado ao setor de Faturamento.</p>
-      <p><b style="color:var(--ink);">5. Cancelamento.</b> A empresa reserva-se o direito de cancelar reservas em caso de indisponibilidade do item, inconsistência nos dados informados, ou reprovação do DP.</p>
+      <p><b style="color:var(--ink);">4. Pagamento.</b> O pagamento é feito via Pix, com envio do comprovante pelo próprio catálogo; a venda é concluída após a confirmação do pagamento pela TI.</p>
+      <p><b style="color:var(--ink);">5. Cancelamento.</b> A empresa reserva-se o direito de cancelar reservas em caso de indisponibilidade do item ou inconsistência nos dados informados.</p>
       <p><b style="color:var(--ink);">6. Responsabilidade.</b> As informações prestadas no momento da reserva (nome, CPF, setor) são de responsabilidade do colaborador e serão usadas para fins de identificação e cobrança.</p>
     </div>
     <div class="modal-foot"><button class="btn btn-primary" onclick="closeModal()">Entendi</button></div>
@@ -707,7 +717,7 @@ const modalContent = document.getElementById('modalContent');
 let currentPagamento = null;
 
 function openReservaModal(){
-  currentPagamento = null;
+  currentPagamento = 'Pix';
   renderReservaForm();
   overlay.classList.remove('hidden');
 }
@@ -740,11 +750,9 @@ function renderReservaForm(){
       <div class="field">
         <label>Forma de pagamento</label>
         <div class="radio-group">
-          <div class="radio-opt" id="optPix" onclick="selectPagamento('Pix')"><span class="t">Pix</span><span class="s">Pagamento à vista</span></div>
-          <div class="radio-opt" id="optFolha" onclick="selectPagamento('Folha')"><span class="t">Crédito em folha</span><span class="s">Parcelado em até 5x</span></div>
+          <div class="radio-opt sel" id="optPix"><span class="t">Pix</span><span class="s">Pagamento à vista</span></div>
         </div>
       </div>
-      <div id="folhaFields"></div>
       <div id="simBox"></div>
       <div id="formError" class="hidden sim-box sim-warn"></div>
     </div>
@@ -756,6 +764,7 @@ function renderReservaForm(){
   document.getElementById('fNome').addEventListener('input', validateForm);
   document.getElementById('fMatricula').addEventListener('input', validateForm);
   document.getElementById('fSetor').addEventListener('input', validateForm);
+  updateSimulation();
 
   const gateData = JSON.parse(sessionStorage.getItem('amvox_gate_data') || 'null');
   if(gateData){
@@ -766,33 +775,10 @@ function renderReservaForm(){
   }
 }
 
-function selectPagamento(tipo){
-  currentPagamento = tipo;
-  document.getElementById('optPix').classList.toggle('sel', tipo==='Pix');
-  document.getElementById('optFolha').classList.toggle('sel', tipo==='Folha');
-  const folhaFields = document.getElementById('folhaFields');
-  if(tipo==='Folha'){
-    folhaFields.innerHTML = `
-      <div class="field"><label>Parcelas</label>
-        <select id="fParcelas">${Array.from({length:5},(_,n)=>`<option value="${n+1}">${n+1}x</option>`).join('')}</select>
-      </div>
-    `;
-    document.getElementById('fParcelas').addEventListener('change', updateSimulation);
-  } else { folhaFields.innerHTML = ''; }
-  updateSimulation(); validateForm();
-}
-
 function updateSimulation(){
   const box = document.getElementById('simBox');
-  const total = cartTotal();
-  if(!currentPagamento){ box.innerHTML=''; return; }
-  if(currentPagamento==='Pix'){
-    box.innerHTML = `<div class="sim-box sim-ok"><b>${brl(total)}</b> à vista via Pix. Itens ficam reservados assim que o chamado é aberto.</div>`;
-    return;
-  }
-  const parcelas = parseInt(document.getElementById('fParcelas')?.value || '1',10);
-  const valorParcela = total / parcelas;
-  box.innerHTML = `<div class="sim-box sim-warn">${parcelas}x de <b>${brl(valorParcela)}</b> em folha. Este chamado será enviado para avaliação do DP e liberado após a aprovação.</div>`;
+  if(!box) return;
+  box.innerHTML = `<div class="sim-box sim-ok"><b>${brl(cartTotal())}</b> à vista via Pix. Itens ficam reservados assim que o chamado é aberto.</div>`;
 }
 
 function validateForm(){
@@ -801,10 +787,7 @@ function validateForm(){
   const nome = document.getElementById('fNome')?.value.trim();
   const matricula = document.getElementById('fMatricula')?.value.trim();
   const setor = document.getElementById('fSetor')?.value.trim();
-  let ok = nome && matricula && setor && currentPagamento;
-  if(currentPagamento==='Folha'){
-    ok = ok && document.getElementById('fParcelas');
-  }
+  const ok = nome && matricula && setor && currentPagamento;
   btn.disabled = !ok;
 }
 
@@ -820,8 +803,8 @@ async function submitReserva(){
   const setor = document.getElementById('fSetor').value.trim();
   const payload = {
     nome, matricula, setor,
-    pagamento: currentPagamento==='Pix' ? 'Pix' : 'Crédito em Folha',
-    parcelas: currentPagamento==='Folha' ? parseInt(document.getElementById('fParcelas').value,10) : null,
+    pagamento: 'Pix',
+    parcelas: null,
     itens: cart.map(c => ({ itemId: c.itemId, quantidade: c.quantidade }))
   };
 
@@ -1156,8 +1139,10 @@ function switchAdminSub(name){
   document.querySelectorAll('.subtab-btn').forEach(b=>b.classList.toggle('active', b.dataset.sub===name));
   document.getElementById('admin-sub-chamados').classList.toggle('hidden', name!=='chamados');
   document.getElementById('admin-sub-catalogo').classList.toggle('hidden', name!=='catalogo');
+  document.getElementById('admin-sub-usuarios').classList.toggle('hidden', name!=='usuarios');
   if(name==='chamados') renderDP();
-  else renderManageList();
+  else if(name==='catalogo') renderManageList();
+  else renderUsuarios();
 }
 async function refreshAdmin(){
   try{ await loadCatalog(); } catch(e){ console.error(e); }
@@ -1485,6 +1470,83 @@ async function removeItem(id){
     console.error('Erro ao remover item', err);
     showToast('Não foi possível remover: ' + err.message);
   }
+}
+
+/* ============ USUÁRIOS (admin) ============ */
+let usuariosList = [];
+let userSearchTerm = '';
+document.getElementById('userSearch').addEventListener('input', e=>{ userSearchTerm = e.target.value.trim().toLowerCase(); desenharUsuarios(); });
+
+async function renderUsuarios(){
+  try{
+    const res = await fetch('/api/usuarios', { headers: adminHeaders() });
+    const data = await res.json();
+    if(!res.ok) throw new Error(data.error || 'Falha ao carregar usuários.');
+    usuariosList = data.usuarios || [];
+    desenharUsuarios();
+  } catch(err){
+    console.error('Erro ao carregar usuários', err);
+    showToast(err.message || 'Não foi possível carregar os usuários.');
+  }
+}
+
+function desenharUsuarios(){
+  const wrap = document.getElementById('userList');
+  if(!wrap) return;
+  const lista = usuariosList.filter(u=>{
+    if(!userSearchTerm) return true;
+    const hay = [u.nome, u.email, u.cpf, u.setor].map(v=>String(v||'').toLowerCase()).join(' ');
+    return hay.includes(userSearchTerm);
+  });
+  document.getElementById('userEmpty').classList.toggle('hidden', lista.length>0);
+  wrap.innerHTML = lista.map(u=>`
+    <div class="manage-row">
+      <div class="info">
+        <div class="t1">${esc(u.nome)} ${u.bloqueado ? '<span class="badge badge-rep" style="margin-left:8px;">Bloqueado</span>' : ''}</div>
+        <div class="t2">${esc(u.email)} · CPF ${esc(formatCpf(u.cpf))} · ${esc(u.setor||'—')} · último acesso: ${u.ultimo_acesso ? new Date(u.ultimo_acesso).toLocaleString('pt-BR') : '—'}</div>
+      </div>
+      <div class="actions">
+        <button class="btn btn-outline btn-sm" onclick="novaSenhaUsuario('${u.cpf}','${esc(u.nome)}')">Nova senha</button>
+        <button class="btn ${u.bloqueado?'btn-outline':'btn-danger-outline'} btn-sm" onclick="alternarBloqueio('${u.cpf}', ${u.bloqueado ? 'false' : 'true'}, '${esc(u.nome)}')">${u.bloqueado ? 'Desbloquear' : 'Bloquear'}</button>
+        <button class="btn btn-danger-outline btn-sm" onclick="excluirUsuario('${u.cpf}','${esc(u.nome)}')">Excluir</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function patchUsuario(payload, okMsg){
+  try{
+    const res = await fetch('/api/usuarios', {
+      method:'PATCH', headers: adminHeaders({'Content-Type':'application/json'}), body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if(!res.ok) throw new Error(data.error || 'Falha na operação.');
+    showToast(okMsg);
+    await renderUsuarios();
+  } catch(err){ showToast(err.message || 'Falha na operação.'); }
+}
+
+function novaSenhaUsuario(cpf, nome){
+  const s = prompt(`Nova senha para ${nome} (mínimo 4 caracteres):`);
+  if(s === null) return;
+  if(s.length < 4){ showToast('A senha precisa ter pelo menos 4 caracteres.'); return; }
+  patchUsuario({ cpf, acao: 'senha', novaSenha: s }, 'Senha alterada! ✓');
+}
+
+function alternarBloqueio(cpf, bloquear, nome){
+  if(bloquear && !confirm(`Bloquear o acesso de ${nome}? Essa pessoa não vai mais conseguir entrar no catálogo.`)) return;
+  patchUsuario({ cpf, acao: bloquear ? 'bloquear' : 'desbloquear' }, bloquear ? 'Usuário bloqueado.' : 'Usuário desbloqueado. ✓');
+}
+
+async function excluirUsuario(cpf, nome){
+  if(!confirm(`Excluir o cadastro de ${nome}? A pessoa poderá se cadastrar de novo depois. Essa ação não tem volta.`)) return;
+  try{
+    const res = await fetch('/api/usuarios?cpf=' + encodeURIComponent(cpf), { method:'DELETE', headers: adminHeaders() });
+    const data = await res.json();
+    if(!res.ok) throw new Error(data.error || 'Falha ao excluir.');
+    showToast('Cadastro excluído.');
+    await renderUsuarios();
+  } catch(err){ showToast(err.message || 'Falha ao excluir.'); }
 }
 
 /* ============ INIT ============ */

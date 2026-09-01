@@ -57,13 +57,14 @@ export default async function handler(req, res) {
 
     if (req.method === 'POST') {
       const body = parseBody(req);
-      const { nome, matricula, setor, pagamento, parcelas, itens } = body;
+      const { nome, matricula, setor, pagamento, itens } = body;
 
       if (!nome || !matricula || !setor || !pagamento || !Array.isArray(itens) || itens.length === 0) {
         return res.status(400).json({ error: 'Preencha nome, CPF, setor, forma de pagamento e selecione ao menos um item.' });
       }
-      if (pagamento !== 'Pix' && pagamento !== 'Crédito em Folha') {
-        return res.status(400).json({ error: 'Forma de pagamento inválida.' });
+      // As compras agora são apenas via Pix (pagamento à vista)
+      if (pagamento !== 'Pix') {
+        return res.status(400).json({ error: 'Forma de pagamento inválida: as compras são apenas via Pix (à vista).' });
       }
 
       const ids = [...new Set(itens.map((i) => i.itemId))];
@@ -101,16 +102,9 @@ export default async function handler(req, res) {
         linhas.push({ item, qty, isStock });
       }
 
-      let parcelasNum = null;
-      let valorParcela = null;
-      let status;
-      if (pagamento === 'Pix') {
-        status = 'Aguardando pagamento Pix';
-      } else {
-        parcelasNum = Math.max(1, Math.min(5, parseInt(parcelas, 10) || 1));
-        valorParcela = Math.round((valorTotal / parcelasNum) * 100) / 100;
-        status = 'Aguardando avaliação do DP';
-      }
+      const parcelasNum = null;
+      const valorParcela = null;
+      const status = 'Aguardando pagamento Pix';
 
       const { data: chamadoRow, error: chErr } = await supabase
         .from('chamados')
