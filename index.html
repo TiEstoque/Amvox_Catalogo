@@ -181,7 +181,7 @@
   .subtab-btn.active{color:var(--primary);border-bottom-color:var(--accent);}
 
   .dp-summary{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:20px;}
-  .vendas-cards{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;}
+  .vendas-cards{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:20px;}
   @media(max-width:900px){.vendas-cards{grid-template-columns:repeat(2,1fr);}}
   @media(max-width:900px){.dp-summary{grid-template-columns:repeat(2,1fr);}}
   .dp-stat{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px;}
@@ -1195,9 +1195,14 @@ function switchAdminSub(name){
 /* ============ VENDAS (dashboard) ============ */
 async function renderVendas(){
   try{
-    const res = await fetch('/api/reservas', { headers: adminHeaders() });
+    const [res, resCat] = await Promise.all([
+      fetch('/api/reservas', { headers: adminHeaders() }),
+      fetch('/api/catalog')
+    ]);
     const data = await res.json();
     if(!res.ok) throw new Error(data.error || 'Falha ao carregar vendas.');
+    const dataCat = resCat.ok ? await resCat.json() : { items: [] };
+    const catalogoItens = dataCat.items || [];
     const todos = data.chamados || [];
     const vendas = todos.filter(c=>c.status==='Concluído');
     const abertos = todos.filter(c=>!['Concluído','Cancelado','Reprovado pelo DP'].includes(c.status));
@@ -1206,12 +1211,15 @@ async function renderVendas(){
     const unidades = vendas.reduce((a,c)=>a+c.itens.reduce((x,i)=>x+i.quantidade,0),0);
     const emAberto = abertos.reduce((a,c)=>a+c.valorTotal,0);
     const ticket = vendas.length ? totalVendido/vendas.length : 0;
+    const estoqueValor = catalogoItens.reduce((a,i)=>
+      a + (i.isStock ? (i.availableQty||0) * i.preco : (i.disponivel ? i.preco : 0)), 0);
 
     document.getElementById('vendasCards').innerHTML = `
       <div class="dp-stat"><div class="n" style="color:var(--success);">${brl(totalVendido)}</div><div class="l">Total vendido</div></div>
       <div class="dp-stat"><div class="n">${vendas.length} <small style="font-size:12px;color:var(--ink-soft);">(${unidades} itens)</small></div><div class="l">Vendas concluídas</div></div>
       <div class="dp-stat"><div class="n">${brl(ticket)}</div><div class="l">Ticket médio</div></div>
       <div class="dp-stat"><div class="n" style="color:var(--warning);">${brl(emAberto)}</div><div class="l">Em aberto (reservas ativas)</div></div>
+      <div class="dp-stat"><div class="n" style="color:#1D4E89;">${brl(estoqueValor)}</div><div class="l">Em estoque (a vender)</div></div>
     `;
 
     const porCat = {};
