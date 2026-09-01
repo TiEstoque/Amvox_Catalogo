@@ -443,7 +443,7 @@
         </div>
         <div class="viz-grid2">
           <div class="viz-card"><h2>Vendas por categoria</h2><div id="vizCategorias"></div></div>
-          <div class="viz-card"><h2>Top compradores</h2><div id="vizCompradores"></div></div>
+          <div class="viz-card"><h2>Itens mais vendidos</h2><div id="vizItensVendidos"></div></div>
         </div>
         <h2 style="font-size:17px;margin:16px 0 10px;">Vendas concluídas</h2>
         <div id="vendasLista"></div>
@@ -1327,11 +1327,16 @@ async function renderVendas(){
       .map(([nome,v])=>({ nome, valor: v.valor, extra: `${v.qtd} ${v.qtd===1?'unidade':'unidades'}` }))
       .sort((a,b)=>b.valor-a.valor));
 
-    // Top compradores (barras horizontais)
-    const porPessoa = {};
-    vendas.forEach(c=>{ const k = c.nome || '—'; porPessoa[k] = (porPessoa[k]||0) + c.valorTotal; });
-    vizBarras('vizCompradores', Object.entries(porPessoa)
-      .map(([nome,valor])=>({ nome, valor }))
+    // Itens mais vendidos (barras horizontais)
+    const porItem = {};
+    vendas.forEach(c=>c.itens.forEach(i=>{
+      const k = i.titulo || '—';
+      porItem[k] = porItem[k] || { valor: 0, qtd: 0 };
+      porItem[k].valor += i.preco * i.quantidade;
+      porItem[k].qtd += i.quantidade;
+    }));
+    vizBarras('vizItensVendidos', Object.entries(porItem)
+      .map(([nome,v])=>({ nome, valor: v.valor, extra: `${v.qtd} ${v.qtd===1?'unidade':'unidades'}` }))
       .sort((a,b)=>b.valor-a.valor).slice(0,5));
 
     const orden = vendas.slice().sort((a,b)=>new Date(b.dataAbertura)-new Date(a.dataAbertura));
@@ -1339,7 +1344,7 @@ async function renderVendas(){
     document.getElementById('vendasLista').innerHTML = orden.map(c=>`
       <div class="ticket">
         <div class="ticket-top">
-          <div><span class="mono" style="font-size:11.5px;color:var(--ink-soft);">${c.protocolo}</span> <strong style="margin-left:8px;">${esc(c.nome)}</strong></div>
+          <div><span class="mono" style="font-size:11.5px;color:var(--ink-soft);">${c.protocolo}</span></div>
           <div class="val">${brl(c.valorTotal)}</div>
         </div>
         <div class="items-list">${c.itens.map(it=>`Nº ${esc(it.numero)} — ${esc(it.titulo)} (${it.quantidade}x)`).join(' · ')}</div>
