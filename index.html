@@ -295,7 +295,7 @@
       </div>
       <div class="info-item">
         <div class="info-icon">🔒</div>
-        <div><h3>Reserva automática</h3><p>Ao abrir o chamado, o item já fica reservado — evita que duas pessoas peçam a mesma coisa.</p></div>
+        <div><h3>Reserva automática (48h)</h3><p>Ao reservar, o item já fica segurado pra você. A reserva vale por <b>48 horas</b>: sem o comprovante do Pix anexado nesse prazo, o item volta automaticamente para o catálogo.</p></div>
       </div>
     </div>
 
@@ -882,6 +882,7 @@ function renderConfirmation(c){
         <button class="btn btn-primary" id="btnAnexoConfirm" onclick="document.getElementById('cmpConfirm').click()">📎 Anexar comprovante do Pix</button>
         <input type="file" id="cmpConfirm" accept="image/*,application/pdf" style="display:none;" onchange="enviarComprovante('${c.protocolo}','${esc(c.matricula||'')}', this)">
         <p style="font-size:11.5px;color:var(--ink-soft);margin-top:6px;">Pagou? Anexe o comprovante aqui — a TI é avisada na hora.</p>
+        <p style="font-size:11.5px;color:var(--warning);margin-top:4px;font-weight:600;">⏰ A reserva vale por 48 horas: sem o comprovante anexado nesse prazo, os itens voltam automaticamente para o catálogo.</p>
       </div>` : ''}
       <p id="imgError" class="hidden" style="color:var(--danger);font-size:12px;margin-top:8px;"></p>
     </div>
@@ -1016,7 +1017,7 @@ async function renderMeusChamados(){
         <div class="meta">${esc(c.pagamento)}${c.parcelas ? ' · '+c.parcelas+'x de '+brl(c.valorParcela) : ''} · ${new Date(c.dataAbertura).toLocaleDateString('pt-BR')}</div>
         <div class="items-list">${c.itens.map(it=>`Nº ${esc(it.numero)} — ${esc(it.titulo)} (${it.quantidade}x)`).join(' · ')}</div>
         <div style="margin-top:8px;" class="val">Total: ${brl(c.valorTotal)}</div>
-        ${c.status==='Aguardando pagamento Pix' ? `<div style="margin-top:8px;font-size:12px;color:var(--ink-soft);">Chave Pix (CNPJ): <b class="mono">${CHAVE_PIX}</b> · Valor: <b>${brl(c.valorTotal)}</b></div>
+        ${c.status==='Aguardando pagamento Pix' ? `<div style="margin-top:8px;font-size:12px;color:var(--ink-soft);">Chave Pix (CNPJ): <b class="mono">${CHAVE_PIX}</b> · Valor: <b>${brl(c.valorTotal)}</b><br>⏰ Reserva válida até <b>${new Date(new Date(c.dataAbertura).getTime() + 48*3600*1000).toLocaleString('pt-BR')}</b> — depois disso os itens voltam pro catálogo.</div>
         <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">
           <button class="btn btn-primary btn-sm" onclick="document.getElementById('cmp-${c.protocolo}').click()">📎 Anexar comprovante do Pix</button>
           <button class="btn btn-outline btn-sm" onclick="informarPix('${c.protocolo}','${esc(c.matricula||'')}')">Já fiz o Pix (sem comprovante)</button>
