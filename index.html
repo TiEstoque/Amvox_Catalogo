@@ -373,6 +373,10 @@
       <div id="admin-sub-chamados">
         <div class="dp-summary" id="dpSummary"></div>
         <div class="chip-row" id="dpFilterChips" style="margin-bottom:16px;"></div>
+        <!-- Botão temporário: reemite NDs antigas incluindo nome + CPF (remover depois de usar) -->
+        <div style="margin:-6px 0 14px;">
+          <button class="btn btn-outline btn-sm" onclick="regerarNDsComCpf(this)">Reemitir NDs antigas com CPF</button>
+        </div>
         <div id="dpList"></div>
         <div class="empty hidden" id="dpEmpty"><div class="big">📭</div>Nenhum chamado nessa categoria.</div>
       </div>
@@ -1442,6 +1446,24 @@ async function renderDP(){
       ${actions}
     </div>`;
   }).join('');
+}
+
+async function regerarNDsComCpf(btnEl){
+  if(!confirm('Reemitir todas as Notas de Débito já geradas incluindo nome + CPF? Números, itens e valores não mudam.')) return;
+  const original = btnEl.textContent;
+  btnEl.disabled = true; btnEl.textContent = 'Reemitindo...';
+  try{
+    const res = await fetch('/api/notas-debito/regerar', { method: 'POST', headers: adminHeaders() });
+    const data = await res.json().catch(()=>({}));
+    if(!res.ok) throw new Error(data.error || 'Falha ao reemitir as NDs.');
+    const errosTxt = data.erros && data.erros.length ? ` (${data.erros.length} com erro — veja o console)` : '';
+    if(data.erros && data.erros.length) console.warn('NDs com erro:', data.erros);
+    showToast(`NDs reemitidas com CPF: ${data.reemitidas} de ${data.total}${errosTxt}.`);
+  }catch(err){
+    showToast(err.message || 'Não foi possível reemitir as NDs.');
+  }finally{
+    btnEl.disabled = false; btnEl.textContent = original;
+  }
 }
 
 async function baixarNotaDebito(protocolo, btnEl){

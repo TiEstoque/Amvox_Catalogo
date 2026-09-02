@@ -20,7 +20,7 @@ function montarItens(itensChamado) {
 
 // CPF entra na nota formatado (000.000.000-00); se vier em formato
 // inesperado, mantém como foi digitado pra não perder o dado.
-function formatarCpf(cpf) {
+export function formatarCpf(cpf) {
   const digitos = String(cpf || '').replace(/\D/g, '');
   if (digitos.length !== 11) return String(cpf || '').trim();
   return `${digitos.slice(0, 3)}.${digitos.slice(3, 6)}.${digitos.slice(6, 9)}-${digitos.slice(9)}`;
