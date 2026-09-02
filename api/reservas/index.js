@@ -128,10 +128,10 @@ export default async function handler(req, res) {
         linhas.push({ item, qty, isStock });
       }
 
-      // Limite: máximo 3 itens por pessoa (por CPF), somando reservas ativas e
+      // Limite: máximo 4 itens por pessoa (por CPF), somando reservas ativas e
       // compras concluídas — sair e reservar de novo não burla o limite.
       // Chamado cancelado/reprovado/expirado devolve o direito.
-      const LIMITE_POR_PESSOA = 3;
+      const LIMITE_POR_PESSOA = 4;
       const cpfLimpo = String(matricula).replace(/\D/g, '');
       const qtdNova = linhas.reduce((a, l) => a + l.qty, 0);
       if (qtdNova > LIMITE_POR_PESSOA) {
