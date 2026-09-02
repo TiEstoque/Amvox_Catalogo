@@ -1689,17 +1689,44 @@ let usuariosList = [];
 let userSearchTerm = '';
 document.getElementById('userSearch').addEventListener('input', e=>{ userSearchTerm = e.target.value.trim().toLowerCase(); desenharUsuarios(); });
 
+let chamadosPorCpf = {};
+
 async function renderUsuarios(){
   try{
-    const res = await fetch('/api/usuarios', { headers: adminHeaders() });
+    const [res, resCh] = await Promise.all([
+      fetch('/api/usuarios', { headers: adminHeaders() }),
+      fetch('/api/reservas', { headers: adminHeaders() })
+    ]);
     const data = await res.json();
     if(!res.ok) throw new Error(data.error || 'Falha ao carregar usuários.');
     usuariosList = data.usuarios || [];
+
+    chamadosPorCpf = {};
+    if(resCh.ok){
+      const chamados = (await resCh.json()).chamados || [];
+      chamados.forEach(c=>{
+        const cpf = String(c.matricula||'').replace(/\D/g,'');
+        if(!cpf) return;
+        (chamadosPorCpf[cpf] = chamadosPorCpf[cpf] || []).push(c);
+      });
+    }
     desenharUsuarios();
   } catch(err){
     console.error('Erro ao carregar usuários', err);
     showToast(err.message || 'Não foi possível carregar os usuários.');
   }
+}
+
+function resumoComprasUsuario(cpf){
+  const chamados = chamadosPorCpf[String(cpf).replace(/\D/g,'')] || [];
+  const concluidos = chamados.filter(c=>c.status==='Concluído');
+  const ativos = chamados.filter(c=>!['Concluído','Cancelado','Reprovado pelo DP'].includes(c.status));
+  return {
+    chamados,
+    valorComprado: concluidos.reduce((a,c)=>a+c.valorTotal,0),
+    itensComprados: concluidos.reduce((a,c)=>a+c.itens.reduce((x,i)=>x+i.quantidade,0),0),
+    itensAtivos: ativos.reduce((a,c)=>a+c.itens.reduce((x,i)=>x+i.quantidade,0),0),
+  };
 }
 
 function desenharUsuarios(){
@@ -1711,19 +1738,49 @@ function desenharUsuarios(){
     return hay.includes(userSearchTerm);
   });
   document.getElementById('userEmpty').classList.toggle('hidden', lista.length>0);
-  wrap.innerHTML = lista.map(u=>`
-    <div class="manage-row">
+  wrap.innerHTML = lista.map(u=>{
+    const r = resumoComprasUsuario(u.cpf);
+    const compraTxt = r.valorComprado > 0
+      ? `Comprou <b style="color:var(--success);">${brl(r.valorComprado)}</b> (${r.itensComprados} ${r.itensComprados===1?'item':'itens'})`
+      : 'Nenhuma compra concluída';
+    const ativoTxt = r.itensAtivos > 0 ? ` · ${r.itensAtivos} em reserva` : '';
+    return `
+    <div class="manage-row" style="flex-wrap:wrap;">
       <div class="info">
         <div class="t1">${esc(u.nome)} ${u.bloqueado ? '<span class="badge badge-rep" style="margin-left:8px;">Bloqueado</span>' : ''}</div>
         <div class="t2">${esc(u.email)} · CPF ${esc(formatCpf(u.cpf))} · ${esc(u.setor||'—')} · último acesso: ${u.ultimo_acesso ? new Date(u.ultimo_acesso).toLocaleString('pt-BR') : '—'}</div>
+        <div class="t2">${compraTxt}${ativoTxt}</div>
       </div>
       <div class="actions">
+        <button class="btn btn-primary btn-sm" onclick="toggleComprasUsuario('${u.cpf}')">Compras</button>
         <button class="btn btn-outline btn-sm" onclick="novaSenhaUsuario('${u.cpf}','${esc(u.nome)}')">Nova senha</button>
         <button class="btn ${u.bloqueado?'btn-outline':'btn-danger-outline'} btn-sm" onclick="alternarBloqueio('${u.cpf}', ${u.bloqueado ? 'false' : 'true'}, '${esc(u.nome)}')">${u.bloqueado ? 'Desbloquear' : 'Bloquear'}</button>
         <button class="btn btn-danger-outline btn-sm" onclick="excluirUsuario('${u.cpf}','${esc(u.nome)}')">Excluir</button>
       </div>
+      <div class="edit-box hidden" id="compras-${u.cpf}"></div>
+    </div>`;
+  }).join('');
+}
+
+function toggleComprasUsuario(cpf){
+  const box = document.getElementById('compras-' + cpf);
+  if(!box) return;
+  const estavaAberto = !box.classList.contains('hidden');
+  document.querySelectorAll('[id^="compras-"]').forEach(b=>{ b.classList.add('hidden'); });
+  if(estavaAberto) return;
+  const r = resumoComprasUsuario(cpf);
+  const orden = r.chamados.slice().sort((a,b)=>new Date(b.dataAbertura)-new Date(a.dataAbertura));
+  box.innerHTML = orden.length ? orden.map(c=>`
+    <div style="padding:8px 0;border-bottom:1px solid var(--line);font-size:12.5px;">
+      <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;">
+        <div><span class="mono" style="font-size:11px;color:var(--ink-soft);">${c.protocolo}</span> ${statusBadge(c.status)}</div>
+        <b>${brl(c.valorTotal)}</b>
+      </div>
+      <div style="color:var(--ink-soft);margin-top:3px;">${c.itens.map(it=>`Nº ${esc(it.numero)} — ${esc(it.titulo)} (${it.quantidade}x)`).join(' · ')}</div>
+      <div style="color:var(--ink-soft);font-size:11px;margin-top:2px;">${new Date(c.dataAbertura).toLocaleString('pt-BR')}</div>
     </div>
-  `).join('');
+  `).join('') : '<p style="font-size:12.5px;color:var(--ink-soft);margin:0;">Nenhum chamado desse usuário.</p>';
+  box.classList.remove('hidden');
 }
 
 async function patchUsuario(payload, okMsg){
