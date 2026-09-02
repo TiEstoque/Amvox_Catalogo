@@ -316,7 +316,7 @@
       </div>
       <div class="info-item">
         <div class="info-icon">🔒</div>
-        <div><h3>Reserva automática (48h)</h3><p>Ao reservar, o item já fica segurado pra você. A reserva vale por <b>48 horas</b>: sem o comprovante do Pix anexado nesse prazo, o item volta automaticamente para o catálogo.</p></div>
+        <div><h3>Pagamento na reserva</h3><p>A reserva só é feita com o <b>comprovante do Pix anexado</b>: você paga, anexa e a compra é confirmada na hora — o item já sai como seu e a Nota de Débito fica disponível.</p></div>
       </div>
     </div>
 
@@ -609,7 +609,7 @@ function openTermosGate(e){
       <p><b style="color:var(--ink);">1. Objetivo.</b> Este catálogo destina-se exclusivamente à reserva de itens de TI por colaboradores da Amvox, para aquisição via Pix (pagamento à vista).</p>
       <p><b style="color:var(--ink);">2. Dados coletados.</b> Nome, email e CPF são coletados para identificação do colaborador e vinculação das reservas realizadas, conforme a Lei Geral de Proteção de Dados Pessoais (Lei nº 13.709/2018).</p>
       <p><b style="color:var(--ink);">3. Reserva de itens.</b> Ao selecionar um item e abrir um chamado, o item fica automaticamente reservado, sujeito à disponibilidade em estoque no momento da confirmação.</p>
-      <p><b style="color:var(--ink);">4. Pagamento.</b> O pagamento é feito via Pix, com envio do comprovante pelo próprio catálogo; ao anexar o comprovante a venda é confirmada automaticamente e a Nota de Débito fica disponível.</p>
+      <p><b style="color:var(--ink);">4. Pagamento.</b> O pagamento é feito via Pix no ato da reserva: você paga pela chave informada, anexa o comprovante no próprio formulário e a compra é confirmada na hora, com a Nota de Débito liberada.</p>
       <p><b style="color:var(--ink);">5. Cancelamento.</b> A empresa reserva-se o direito de cancelar reservas em caso de indisponibilidade do item ou inconsistência nos dados informados.</p>
       <p><b style="color:var(--ink);">6. Responsabilidade.</b> As informações prestadas no momento da reserva (nome, CPF, setor) são de responsabilidade do colaborador e serão usadas para fins de identificação e cobrança.</p>
     </div>
@@ -823,6 +823,17 @@ function renderReservaForm(){
           <div class="radio-opt sel" id="optPix"><span class="t">Pix</span><span class="s">Pagamento à vista · Chave (CNPJ): ${CHAVE_PIX}</span></div>
         </div>
       </div>
+      <div class="sim-box sim-ok" style="margin-bottom:12px;">
+        <b>1. Pague agora via Pix</b><br>
+        Chave (CNPJ): <b class="mono">${CHAVE_PIX}</b>
+        <button class="btn btn-outline btn-sm" style="margin-left:6px;" onclick="copiarChavePix(this)">Copiar chave</button><br>
+        Valor: <b>${brl(total)}</b>
+      </div>
+      <div class="field">
+        <label>2. Anexe o comprovante do Pix (obrigatório)</label>
+        <input type="file" id="fComprovante" accept="image/*,application/pdf">
+        <p style="font-size:11.5px;color:var(--ink-soft);margin-top:4px;">Sem o comprovante não é possível reservar. Ao confirmar, a compra é concluída na hora e a Nota de Débito liberada.</p>
+      </div>
       <div id="simBox"></div>
       <div id="formError" class="hidden sim-box sim-warn"></div>
     </div>
@@ -834,6 +845,7 @@ function renderReservaForm(){
   document.getElementById('fNome').addEventListener('input', validateForm);
   document.getElementById('fMatricula').addEventListener('input', validateForm);
   document.getElementById('fSetor').addEventListener('input', validateForm);
+  document.getElementById('fComprovante').addEventListener('change', validateForm);
   updateSimulation();
 
   const gateData = JSON.parse(sessionStorage.getItem('amvox_gate_data') || 'null');
@@ -848,7 +860,7 @@ function renderReservaForm(){
 function updateSimulation(){
   const box = document.getElementById('simBox');
   if(!box) return;
-  box.innerHTML = `<div class="sim-box sim-ok"><b>${brl(cartTotal())}</b> à vista via Pix. Itens ficam reservados assim que o chamado é aberto.</div>`;
+  box.innerHTML = `<div class="sim-box sim-ok"><b>${brl(cartTotal())}</b> à vista via Pix. Pague, anexe o comprovante e a compra é confirmada na hora.</div>`;
 }
 
 function validateForm(){
@@ -857,7 +869,8 @@ function validateForm(){
   const nome = document.getElementById('fNome')?.value.trim();
   const matricula = document.getElementById('fMatricula')?.value.trim();
   const setor = document.getElementById('fSetor')?.value.trim();
-  const ok = nome && matricula && setor && currentPagamento;
+  const temComprovante = !!document.getElementById('fComprovante')?.files?.length;
+  const ok = nome && matricula && setor && currentPagamento && temComprovante;
   btn.disabled = !ok;
 }
 
@@ -865,7 +878,7 @@ async function submitReserva(){
   const btn = document.getElementById('submitBtn');
   const originalLabel = btn.textContent;
   btn.disabled = true;
-  btn.textContent = 'Salvando...';
+  btn.textContent = 'Enviando...';
   clearFormError();
 
   const nome = document.getElementById('fNome').value.trim();
@@ -879,6 +892,23 @@ async function submitReserva(){
   };
 
   try{
+    // comprovante do Pix obrigatório — vai junto no corpo da reserva
+    const file = document.getElementById('fComprovante')?.files?.[0];
+    if(!file) throw new Error('Anexe o comprovante do Pix para confirmar a reserva.');
+    let dataBase64, contentType;
+    if(file.type === 'application/pdf'){
+      if(file.size > 4 * 1024 * 1024) throw new Error('O PDF pode ter no máximo 4MB.');
+      dataBase64 = await fileToBase64(file);
+      contentType = 'application/pdf';
+    } else if(file.type.startsWith('image/')){
+      const dataUrl = await resizeImageFile(file, 1200, 0.85);
+      dataBase64 = dataUrl.split(',')[1];
+      contentType = 'image/jpeg';
+    } else {
+      throw new Error('O comprovante precisa ser uma imagem ou um PDF.');
+    }
+    payload.comprovante = { filename: file.name, contentType, dataBase64 };
+
     const res = await fetch('/api/reservas', {
       method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload)
     });
@@ -913,24 +943,26 @@ function renderConfirmation(c){
   modalContent.innerHTML = `
     <div class="modal-body" style="text-align:center;padding-top:30px;">
       <div class="confirm-icon">✓</div>
-      <h2>Reserva confirmada</h2>
+      <h2>${c.status==='Concluído' ? 'Compra confirmada' : 'Reserva confirmada'}</h2>
       <p style="color:var(--ink-soft);font-size:13.5px;">Guarde o protocolo para acompanhar em "Meus chamados".</p>
       <div class="protocol">${c.protocolo}</div>
       <div style="margin:14px 0;">${statusBadge(c.status)}</div>
       <div style="text-align:left;">${itemsHtml}</div>
       <p style="font-size:13px;color:var(--ink-soft);margin-top:10px;">Total: <b>${brl(c.valorTotal)}</b></p>
-      ${c.pagamento==='Pix' ? `<div style="margin-top:6px;">
+      ${c.status==='Concluído' ? `<div style="margin-top:6px;">
         <div class="sim-box sim-ok" style="text-align:left;margin-bottom:10px;">
-          <b>Pague agora via Pix</b><br>
-          Chave (CNPJ): <b class="mono">${CHAVE_PIX}</b>
-          <button class="btn btn-outline btn-sm" style="margin-left:6px;" onclick="copiarChavePix(this)">Copiar chave</button><br>
-          Valor: <b>${brl(c.valorTotal)}</b>
+          <b>Pagamento recebido — compra concluída!</b><br>
+          Sua Nota de Débito já está disponível.
+        </div>
+        <button class="btn btn-primary" onclick="baixarNotaDebitoAssociado('${c.protocolo}','${esc(c.matricula||'')}', this)">Baixar Nota de Débito</button>
+      </div>` : (c.pagamento==='Pix' ? `<div style="margin-top:6px;">
+        <div class="sim-box sim-warn" style="text-align:left;margin-bottom:10px;">
+          Recebemos sua reserva, mas a confirmação automática não completou.
+          Anexe o comprovante de novo abaixo — ou depois, em "Meus chamados".
         </div>
         <button class="btn btn-primary" id="btnAnexoConfirm" onclick="document.getElementById('cmpConfirm').click()">📎 Anexar comprovante do Pix</button>
         <input type="file" id="cmpConfirm" accept="image/*,application/pdf" style="display:none;" onchange="enviarComprovante('${c.protocolo}','${esc(c.matricula||'')}', this)">
-        <p style="font-size:11.5px;color:var(--ink-soft);margin-top:6px;">Pagou? Anexe o comprovante aqui — sua compra é confirmada na hora e a Nota de Débito liberada.</p>
-        <p style="font-size:11.5px;color:var(--warning);margin-top:4px;font-weight:600;">⏰ A reserva vale por 48 horas: sem o comprovante anexado nesse prazo, os itens voltam automaticamente para o catálogo.</p>
-      </div>` : ''}
+      </div>` : '')}
       <p id="imgError" class="hidden" style="color:var(--danger);font-size:12px;margin-top:8px;"></p>
     </div>
     <div class="modal-foot" style="justify-content:center;">

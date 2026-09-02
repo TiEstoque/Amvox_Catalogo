@@ -8,6 +8,9 @@
     },
     "api/comprovante.js": {
       "maxDuration": 30
+    },
+    "api/reservas/index.js": {
+      "maxDuration": 30
     }
   }
 }

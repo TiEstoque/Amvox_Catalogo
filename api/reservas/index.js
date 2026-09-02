@@ -1,10 +1,22 @@
 // api/reservas/index.js
 // GET  /api/reservas?q=texto   -> busca chamados por nome/matrícula ("Meus chamados")
 // GET  /api/reservas           -> lista TODOS os chamados (usado pelo Painel Administrativo)
-// POST /api/reservas           -> abre uma reserva nova (associado), com vários itens de uma vez
+// POST /api/reservas           -> abre uma reserva nova (associado), com vários itens
+//      de uma vez. O comprovante do Pix é OBRIGATÓRIO no corpo — sem ele a
+//      reserva nem é criada; com ele, a compra já nasce confirmada (Concluído),
+//      com Nota de Débito gerada e enviada por e-mail.
 
 import { getSupabase } from '../_supabase.js';
 import { requireAdmin } from '../_admin.js';
+import { concluirChamado } from '../_concluir.js';
+
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: '6mb',
+    },
+  },
+};
 
 export default async function handler(req, res) {
   try {
@@ -65,6 +77,20 @@ export default async function handler(req, res) {
       // As compras agora são apenas via Pix (pagamento à vista)
       if (pagamento !== 'Pix') {
         return res.status(400).json({ error: 'Forma de pagamento inválida: as compras são apenas via Pix (à vista).' });
+      }
+
+      // Trava: só reserva com o comprovante do Pix anexado — a reserva já
+      // nasce paga e confirmada.
+      const cmp = body.comprovante || {};
+      if (!cmp.filename || !cmp.contentType || !cmp.dataBase64) {
+        return res.status(400).json({ error: 'Anexe o comprovante do Pix para confirmar a reserva.' });
+      }
+      if (!cmp.contentType.startsWith('image/') && cmp.contentType !== 'application/pdf') {
+        return res.status(400).json({ error: 'O comprovante precisa ser uma imagem ou PDF.' });
+      }
+      const cmpBuffer = Buffer.from(cmp.dataBase64, 'base64');
+      if (cmpBuffer.length > 4 * 1024 * 1024) {
+        return res.status(413).json({ error: 'Comprovante maior que 4MB. Envie um arquivo menor.' });
       }
 
       const ids = [...new Set(itens.map((i) => i.itemId))];
@@ -190,9 +216,45 @@ export default async function handler(req, res) {
         }
       }
 
+      // Comprovante veio junto -> confirma a compra na hora (vendido + ND +
+      // e-mail). Se algo falhar aqui, a reserva já existe com os itens
+      // segurados e o associado pode reanexar o comprovante em "Meus chamados".
+      let statusFinal = status;
+      let notaDebitoNumero = null;
+      try {
+        const ext =
+          cmp.contentType === 'application/pdf'
+            ? 'pdf'
+            : (cmp.contentType.split('/')[1] || 'jpg').replace(/[^a-z0-9]/gi, '');
+        const cmpPath = `${protocolo}-${Date.now()}.${ext}`;
+        const { error: cmpUpErr } = await supabase.storage
+          .from('comprovantes')
+          .upload(cmpPath, cmpBuffer, { contentType: cmp.contentType, upsert: false });
+        if (cmpUpErr) throw cmpUpErr;
+
+        const { data: atualizados, error: updErr } = await supabase
+          .from('chamados')
+          .update({ comprovante_path: cmpPath, status: 'Concluído' })
+          .eq('protocolo', protocolo)
+          .select();
+        if (updErr) throw updErr;
+
+        const { data: itensDb, error: itensDbErr } = await supabase
+          .from('chamado_itens')
+          .select('*')
+          .eq('chamado_protocolo', protocolo);
+        if (itensDbErr) throw itensDbErr;
+
+        notaDebitoNumero = await concluirChamado({ supabase, chamado: atualizados[0], itens: itensDb });
+        statusFinal = 'Concluído';
+      } catch (confErr) {
+        console.error('Reserva', protocolo, 'criada, mas a confirmação automática falhou:', confErr);
+      }
+
       return res.status(200).json({
         protocolo,
-        status,
+        status: statusFinal,
+        notaDebitoNumero,
         valorTotal,
         nome,
         matricula,
