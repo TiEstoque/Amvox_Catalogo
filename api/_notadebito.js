@@ -18,10 +18,23 @@ function montarItens(itensChamado) {
   return [...primeiras, resto];
 }
 
-export async function gerarNotaDebito({ protocolo, pagador, valorTotal, itens, dataEmissao, getNumeroNd }) {
+// CPF entra na nota formatado (000.000.000-00); se vier em formato
+// inesperado, mantém como foi digitado pra não perder o dado.
+function formatarCpf(cpf) {
+  const digitos = String(cpf || '').replace(/\D/g, '');
+  if (digitos.length !== 11) return String(cpf || '').trim();
+  return `${digitos.slice(0, 3)}.${digitos.slice(3, 6)}.${digitos.slice(6, 9)}-${digitos.slice(9)}`;
+}
+
+export async function gerarNotaDebito({ protocolo, pagador, cpf, valorTotal, itens, dataEmissao, getNumeroNd }) {
   const wb = new ExcelJS.Workbook();
   const buffer = Buffer.from(ND_TEMPLATE_BASE64, 'base64');
   await wb.xlsx.load(buffer);
+
+  // Nome completo + CPF viajam juntos no campo Pagador (PARAMETROS!B8),
+  // que a aba ND espelha na linha "Pagador:" e o CONTROLE registra.
+  const cpfFormatado = formatarCpf(cpf);
+  const pagadorComCpf = cpfFormatado ? `${pagador} — CPF: ${cpfFormatado}` : pagador;
 
   const params = wb.getWorksheet('PARAMETROS');
   const nd = wb.getWorksheet('ND');
@@ -36,14 +49,15 @@ export async function gerarNotaDebito({ protocolo, pagador, valorTotal, itens, d
   params.getCell('B3').value = ano;
   params.getCell('B6').value = dataEmissao;
   params.getCell('B7').value = dataEmissao;
-  params.getCell('B8').value = pagador;
+  params.getCell('B8').value = pagadorComCpf;
   // número da ND: congela como valor fixo (não fica como fórmula, pra nunca
   // mudar depois mesmo que o CONTROLE cresça)
   params.getCell('B4').value = sequencial;
   params.getCell('B5').value = numero;
 
-  // 3) ND — item(ns) e número espelhado
+  // 3) ND — item(ns), número e pagador espelhados (valores fixos, como o D2)
   nd.getCell('D2').value = numero;
+  nd.getCell('A9').value = `Pagador: ${pagadorComCpf}`;
   const linhasItens = montarItens(itens);
   nd.getCell('A13').value = 1;
   nd.getCell('B13').value = linhasItens[0] || '';
@@ -60,7 +74,7 @@ export async function gerarNotaDebito({ protocolo, pagador, valorTotal, itens, d
   const nova = controle.getRow(linhaControle);
   nova.getCell(1).value = numero;
   nova.getCell(2).value = dataEmissao;
-  nova.getCell(3).value = pagador;
+  nova.getCell(3).value = pagadorComCpf;
   nova.getCell(4).value = valorTotal;
   nova.getCell(5).value = 'Emitida';
   [1, 2, 3, 4, 5].forEach((c) => {

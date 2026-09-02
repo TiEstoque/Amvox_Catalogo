@@ -124,6 +124,7 @@ export default async function handler(req, res) {
           const { numero, buffer } = await gerarNotaDebito({
             protocolo,
             pagador: chamado.nome,
+            cpf: chamado.matricula,
             valorTotal: Number(chamado.valor_total),
             itens: itens.map((it) => ({ numero: it.numero, titulo: it.titulo, quantidade: it.quantidade })),
             dataEmissao,
