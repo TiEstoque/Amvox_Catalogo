@@ -2,6 +2,9 @@
   "functions": {
     "api/notas-debito/regerar.js": {
       "maxDuration": 60
+    },
+    "api/reservas/[protocolo].js": {
+      "maxDuration": 30
     }
   }
 }

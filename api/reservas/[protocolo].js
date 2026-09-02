@@ -4,7 +4,10 @@
 
 import { getSupabase } from '../_supabase.js';
 import { requireAdmin } from '../_admin.js';
-import { gerarNotaDebito } from '../_notadebito.js';
+import { gerarNotaDebito, formatarCpf } from '../_notadebito.js';
+import { enviarEmail, emailConfigurado } from '../_email.js';
+
+const EMAIL_NOTAS = process.env.EMAIL_NOTAS_DESTINO || 'entradanotasfiscais@amvox.com.br';
 
 const ALLOWED_STATUS = ['Aprovado pelo DP', 'Reprovado pelo DP', 'Concluído', 'Cancelado'];
 
@@ -158,6 +161,40 @@ export default async function handler(req, res) {
           });
 
           notaDebitoNumero = numero;
+
+          // Envia a ND por e-mail pra entrada de notas fiscais. Falha no
+          // e-mail não desfaz nada — a ND já está gerada e salva; só loga.
+          try {
+            if (emailConfigurado()) {
+              const itensTxt = itens
+                .map((it) => `  - Nº ${it.numero} — ${it.titulo} (${it.quantidade}x)`)
+                .join('\n');
+              await enviarEmail({
+                para: EMAIL_NOTAS,
+                assunto: `Nota de Débito ${numero} — ${chamado.nome} (${protocolo})`,
+                texto: [
+                  `Nota de Débito emitida automaticamente pelo Catálogo de Vendas Internas.`,
+                  ``,
+                  `Número: ${numero}`,
+                  `Chamado: ${protocolo}`,
+                  `Pagador: ${chamado.nome} — CPF: ${formatarCpf(chamado.matricula)}`,
+                  `Setor: ${chamado.setor || '-'}`,
+                  `Valor: R$ ${Number(chamado.valor_total).toFixed(2).replace('.', ',')}`,
+                  `Data de emissão: ${dataEmissao.toLocaleDateString('pt-BR')}`,
+                  ``,
+                  `Itens:`,
+                  itensTxt,
+                  ``,
+                  `O arquivo da nota segue em anexo.`,
+                ].join('\n'),
+                anexos: [{ filename: `${numero}.xlsx`, content: Buffer.from(buffer) }],
+              });
+            } else {
+              console.warn('ND', numero, 'não enviada por e-mail: EMAIL_REMETENTE/EMAIL_SENHA_APP não configurados na Vercel.');
+            }
+          } catch (mailErr) {
+            console.error('Erro ao enviar ND', numero, 'por e-mail:', mailErr);
+          }
         } catch (ndErr) {
           // Não deixa a conclusão do chamado falhar por causa da ND — só loga.
           // O chamado já foi concluído normalmente; a ND pode ser gerada depois manualmente se precisar.
