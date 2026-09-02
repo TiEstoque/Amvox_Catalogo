@@ -5,6 +5,9 @@
     },
     "api/reservas/[protocolo].js": {
       "maxDuration": 30
+    },
+    "api/comprovante.js": {
+      "maxDuration": 30
     }
   }
 }

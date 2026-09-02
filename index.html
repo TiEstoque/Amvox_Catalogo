@@ -609,7 +609,7 @@ function openTermosGate(e){
       <p><b style="color:var(--ink);">1. Objetivo.</b> Este catálogo destina-se exclusivamente à reserva de itens de TI por colaboradores da Amvox, para aquisição via Pix (pagamento à vista).</p>
       <p><b style="color:var(--ink);">2. Dados coletados.</b> Nome, email e CPF são coletados para identificação do colaborador e vinculação das reservas realizadas, conforme a Lei Geral de Proteção de Dados Pessoais (Lei nº 13.709/2018).</p>
       <p><b style="color:var(--ink);">3. Reserva de itens.</b> Ao selecionar um item e abrir um chamado, o item fica automaticamente reservado, sujeito à disponibilidade em estoque no momento da confirmação.</p>
-      <p><b style="color:var(--ink);">4. Pagamento.</b> O pagamento é feito via Pix, com envio do comprovante pelo próprio catálogo; a venda é concluída após a confirmação do pagamento pela TI.</p>
+      <p><b style="color:var(--ink);">4. Pagamento.</b> O pagamento é feito via Pix, com envio do comprovante pelo próprio catálogo; ao anexar o comprovante a venda é confirmada automaticamente e a Nota de Débito fica disponível.</p>
       <p><b style="color:var(--ink);">5. Cancelamento.</b> A empresa reserva-se o direito de cancelar reservas em caso de indisponibilidade do item ou inconsistência nos dados informados.</p>
       <p><b style="color:var(--ink);">6. Responsabilidade.</b> As informações prestadas no momento da reserva (nome, CPF, setor) são de responsabilidade do colaborador e serão usadas para fins de identificação e cobrança.</p>
     </div>
@@ -928,7 +928,7 @@ function renderConfirmation(c){
         </div>
         <button class="btn btn-primary" id="btnAnexoConfirm" onclick="document.getElementById('cmpConfirm').click()">📎 Anexar comprovante do Pix</button>
         <input type="file" id="cmpConfirm" accept="image/*,application/pdf" style="display:none;" onchange="enviarComprovante('${c.protocolo}','${esc(c.matricula||'')}', this)">
-        <p style="font-size:11.5px;color:var(--ink-soft);margin-top:6px;">Pagou? Anexe o comprovante aqui — a TI é avisada na hora.</p>
+        <p style="font-size:11.5px;color:var(--ink-soft);margin-top:6px;">Pagou? Anexe o comprovante aqui — sua compra é confirmada na hora e a Nota de Débito liberada.</p>
         <p style="font-size:11.5px;color:var(--warning);margin-top:4px;font-weight:600;">⏰ A reserva vale por 48 horas: sem o comprovante anexado nesse prazo, os itens voltam automaticamente para o catálogo.</p>
       </div>` : ''}
       <p id="imgError" class="hidden" style="color:var(--danger);font-size:12px;margin-top:8px;"></p>
@@ -1154,9 +1154,13 @@ async function enviarComprovante(protocolo, matricula, inputEl){
     const data = await res.json();
     if(!res.ok) throw new Error(data.error || 'Não foi possível enviar o comprovante.');
 
-    showToast('Comprovante do Pix enviado! ✓');
+    if(data.status === 'Concluído'){
+      showToast('Pagamento confirmado! Compra concluída ✓ Sua Nota de Débito já está disponível em "Meus chamados".');
+    } else {
+      showToast('Comprovante do Pix enviado! ✓');
+    }
     const btnConfirm = document.getElementById('btnAnexoConfirm');
-    if(btnConfirm){ btnConfirm.textContent = 'Comprovante enviado ✓'; btnConfirm.disabled = true; }
+    if(btnConfirm){ btnConfirm.textContent = data.status === 'Concluído' ? 'Compra confirmada ✓' : 'Comprovante enviado ✓'; btnConfirm.disabled = true; }
     if(document.getElementById('lookupInput')?.value.trim()) renderMeusChamados();
   } catch(err){
     console.error('Erro ao enviar comprovante', err);

@@ -1,14 +1,16 @@
 // api/comprovante.js
 // POST /api/comprovante -> associado anexa o comprovante do Pix (imagem ou PDF)
 //      { protocolo, matricula (CPF), filename, contentType, dataBase64 }
-//      Anexar também muda o status para 'Pix informado' quando o chamado
-//      ainda está em 'Aguardando pagamento Pix'.
+//      Anexar o comprovante CONFIRMA a venda na hora: status vira 'Concluído',
+//      os itens são marcados como vendidos, a Nota de Débito é gerada e enviada
+//      por e-mail pra entrada de notas fiscais (com o comprovante junto).
 // GET  /api/comprovante?protocolo=AMX-00018             -> admin (com token)
 // GET  /api/comprovante?protocolo=AMX-00018&matricula=CPF -> o próprio associado
 //      Retorna um link assinado (5 min) para ver o comprovante.
 
 import { getSupabase } from './_supabase.js';
 import { verifyToken } from './_admin.js';
+import { concluirChamado } from './_concluir.js';
 
 export const config = {
   api: {
@@ -72,17 +74,33 @@ export default async function handler(req, res) {
         .upload(path, buffer, { contentType, upsert: false });
       if (upErr) throw upErr;
 
-      const updatePayload = { comprovante_path: path };
-      if (chamado.status === 'Aguardando pagamento Pix') {
-        updatePayload.status = 'Pix informado';
-      }
-      const { error: updErr } = await supabase
+      // Comprovante anexado = venda confirmada. A trava do .eq('status', ...)
+      // garante que só um processo conclui (se o status mudou entre a leitura
+      // e o update — ex.: admin cancelando ao mesmo tempo — nada é concluído).
+      const { data: atualizados, error: updErr } = await supabase
         .from('chamados')
-        .update(updatePayload)
-        .eq('protocolo', protocolo);
+        .update({ comprovante_path: path, status: 'Concluído' })
+        .eq('protocolo', protocolo)
+        .eq('status', chamado.status)
+        .select();
       if (updErr) throw updErr;
 
-      return res.status(200).json({ ok: true, status: updatePayload.status || chamado.status });
+      if (!atualizados || !atualizados.length) {
+        // status mudou no meio do caminho — só registra o comprovante
+        await supabase.from('chamados').update({ comprovante_path: path }).eq('protocolo', protocolo);
+        return res.status(200).json({ ok: true, status: chamado.status });
+      }
+
+      const chamadoConcluido = atualizados[0];
+      const { data: itens, error: itensErr } = await supabase
+        .from('chamado_itens')
+        .select('*')
+        .eq('chamado_protocolo', protocolo);
+      if (itensErr) throw itensErr;
+
+      const notaDebitoNumero = await concluirChamado({ supabase, chamado: chamadoConcluido, itens });
+
+      return res.status(200).json({ ok: true, status: 'Concluído', notaDebitoNumero });
     }
 
     if (req.method === 'GET') {
