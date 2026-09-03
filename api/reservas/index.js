@@ -23,6 +23,32 @@ export default async function handler(req, res) {
     const supabase = getSupabase();
 
     if (req.method === 'GET') {
+      // GET /api/reservas?saldoCpf=CPF -> quantos itens a pessoa ainda pode
+      // comprar (limite por pessoa). Usado pelo modal de reserva pra evitar
+      // que alguém pague o Pix sem ter saldo.
+      const saldoCpf = String(req.query.saldoCpf || '').replace(/\D/g, '');
+      if (saldoCpf) {
+        const LIMITE = 4;
+        const { data: chamadosPessoa, error: cpErr } = await supabase
+          .from('chamados')
+          .select('protocolo, matricula, status');
+        if (cpErr) throw cpErr;
+        const protocolosPessoa = (chamadosPessoa || [])
+          .filter((c) => String(c.matricula || '').replace(/\D/g, '') === saldoCpf)
+          .filter((c) => !['Cancelado', 'Reprovado pelo DP'].includes(c.status))
+          .map((c) => c.protocolo);
+        let usados = 0;
+        if (protocolosPessoa.length) {
+          const { data: itensPessoa, error: ipErr } = await supabase
+            .from('chamado_itens')
+            .select('quantidade')
+            .in('chamado_protocolo', protocolosPessoa);
+          if (ipErr) throw ipErr;
+          usados = (itensPessoa || []).reduce((a, it) => a + it.quantidade, 0);
+        }
+        return res.status(200).json({ limite: LIMITE, usados, disponivel: Math.max(0, LIMITE - usados) });
+      }
+
       const q = String(req.query.q || '').trim();
 
       // Sem filtro de busca = listagem completa (todos os chamados de todo mundo).

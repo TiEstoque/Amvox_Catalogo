@@ -807,6 +807,7 @@ function renderReservaForm(){
   modalContent.innerHTML = `
     <div class="modal-head"><h2>Finalizar reserva</h2></div>
     <div class="modal-body">
+      <div class="sim-box sim-warn" style="margin-bottom:12px;">🪪 <b>Compra permitida somente para colaboradores ativos da Amvox.</b></div>
       <div>
         ${linesHtml}
         <div class="cart-total"><span>Total</span><span>${brl(total)}</span></div>
@@ -820,16 +821,19 @@ function renderReservaForm(){
           <div class="radio-opt sel" id="optPix"><span class="t">Pix</span><span class="s">Pagamento à vista · Chave (CNPJ): ${CHAVE_PIX}</span></div>
         </div>
       </div>
-      <div class="sim-box sim-ok" style="margin-bottom:12px;">
-        <b>1. Pague agora via Pix</b><br>
-        Chave (CNPJ): <b class="mono">${CHAVE_PIX}</b>
-        <button class="btn btn-outline btn-sm" style="margin-left:6px;" onclick="copiarChavePix(this)">Copiar chave</button><br>
-        Valor: <b>${brl(total)}</b>
-      </div>
-      <div class="field">
-        <label>2. Anexe o comprovante do Pix (obrigatório)</label>
-        <input type="file" id="fComprovante" accept="image/*,application/pdf">
-        <p style="font-size:11.5px;color:var(--ink-soft);margin-top:4px;">Sem o comprovante não é possível reservar. Ao confirmar, a compra é concluída na hora e a Nota de Débito liberada.</p>
+      <div id="saldoBox" class="sim-box" style="margin-bottom:12px;">Informe seu CPF acima para verificar quantos itens você ainda pode comprar.</div>
+      <div id="pixBox" class="hidden">
+        <div class="sim-box sim-ok" style="margin-bottom:12px;">
+          <b>1. Pague agora via Pix</b><br>
+          Chave (CNPJ): <b class="mono">${CHAVE_PIX}</b>
+          <button class="btn btn-outline btn-sm" style="margin-left:6px;" onclick="copiarChavePix(this)">Copiar chave</button><br>
+          Valor: <b>${brl(total)}</b>
+        </div>
+        <div class="field">
+          <label>2. Anexe o comprovante do Pix (obrigatório)</label>
+          <input type="file" id="fComprovante" accept="image/*,application/pdf">
+          <p style="font-size:11.5px;color:var(--ink-soft);margin-top:4px;">Sem o comprovante não é possível reservar. Ao confirmar, a compra é concluída na hora e a Nota de Débito liberada.</p>
+        </div>
       </div>
       <div id="simBox"></div>
       <div id="formError" class="hidden sim-box sim-warn"></div>
@@ -840,7 +844,7 @@ function renderReservaForm(){
     </div>
   `;
   document.getElementById('fNome').addEventListener('input', validateForm);
-  document.getElementById('fMatricula').addEventListener('input', validateForm);
+  document.getElementById('fMatricula').addEventListener('input', ()=>{ validateForm(); clearTimeout(saldoTimer); saldoTimer = setTimeout(verificarSaldo, 600); });
   document.getElementById('fSetor').addEventListener('input', validateForm);
   document.getElementById('fComprovante').addEventListener('change', validateForm);
   updateSimulation();
@@ -852,6 +856,56 @@ function renderReservaForm(){
     document.getElementById('fSetor').value = gateData.setor || '';
     validateForm();
   }
+  verificarSaldo();
+}
+
+/* Saldo de itens do limite por pessoa: consulta antes de liberar o Pix,
+   pra ninguém pagar sem ter saldo. */
+let saldoTimer = null;
+let saldoDisponivel = null; // null = ainda não verificado
+async function verificarSaldo(){
+  const box = document.getElementById('saldoBox');
+  const pixBox = document.getElementById('pixBox');
+  if(!box || !pixBox) return;
+  const cpf = (document.getElementById('fMatricula')?.value || '').replace(/\D/g,'');
+  const qtd = cart.reduce((a,c)=>a+c.quantidade,0);
+  saldoDisponivel = null;
+  if(cpf.length < 11){
+    box.className = 'sim-box';
+    box.innerHTML = 'Informe seu CPF acima para verificar quantos itens você ainda pode comprar.';
+    pixBox.classList.add('hidden');
+    validateForm();
+    return;
+  }
+  box.className = 'sim-box';
+  box.innerHTML = 'Verificando seu saldo de itens...';
+  try{
+    const res = await fetch('/api/reservas?saldoCpf=' + encodeURIComponent(cpf));
+    const d = await res.json();
+    if(!res.ok) throw new Error(d.error || 'Falha ao verificar o saldo.');
+    if(d.disponivel <= 0){
+      saldoDisponivel = 0;
+      box.className = 'sim-box sim-warn';
+      box.innerHTML = `🚫 <b>Você já usou o limite de ${d.limite} itens</b> (somando reservas e compras). <b>Não faça o pagamento</b> — não é possível reservar. Dúvidas? Procure a TI.`;
+      pixBox.classList.add('hidden');
+    } else if(qtd > d.disponivel){
+      saldoDisponivel = d.disponivel;
+      box.className = 'sim-box sim-warn';
+      box.innerHTML = `⚠️ Esta reserva tem <b>${qtd} itens</b>, mas você só pode comprar mais <b>${d.disponivel}</b> (limite de ${d.limite}; já usou ${d.usados}). <b>Ajuste o carrinho antes de fazer o pagamento.</b>`;
+      pixBox.classList.add('hidden');
+    } else {
+      saldoDisponivel = d.disponivel;
+      box.className = 'sim-box sim-ok';
+      box.innerHTML = `✅ Você ainda pode comprar <b>${d.disponivel} de ${d.limite} itens</b>${d.usados ? ` (já usou ${d.usados})` : ''}. Esta reserva usa <b>${qtd}</b> — pode pagar tranquilo. 👇`;
+      pixBox.classList.remove('hidden');
+    }
+  }catch(err){
+    console.error('Erro ao verificar saldo', err);
+    box.className = 'sim-box sim-warn';
+    box.innerHTML = 'Não foi possível verificar seu saldo agora. Tente de novo em instantes.';
+    pixBox.classList.add('hidden');
+  }
+  validateForm();
 }
 
 function updateSimulation(){
@@ -867,7 +921,9 @@ function validateForm(){
   const matricula = document.getElementById('fMatricula')?.value.trim();
   const setor = document.getElementById('fSetor')?.value.trim();
   const temComprovante = !!document.getElementById('fComprovante')?.files?.length;
-  const ok = nome && matricula && setor && currentPagamento && temComprovante;
+  const qtd = cart.reduce((a,c)=>a+c.quantidade,0);
+  const temSaldo = saldoDisponivel !== null && saldoDisponivel > 0 && qtd <= saldoDisponivel;
+  const ok = nome && matricula && setor && currentPagamento && temComprovante && temSaldo;
   btn.disabled = !ok;
 }
 
