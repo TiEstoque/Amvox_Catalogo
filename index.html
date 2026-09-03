@@ -1204,6 +1204,22 @@ function statusBadge(status){
 }
 
 /* ============ MEUS CHAMADOS ============ */
+let meusChamadosList = [];
+
+// Associado baixa o resumo (imagem) do próprio chamado concluído — mesmo
+// gerador usado pelo admin, a partir dos dados já carregados na busca.
+async function baixarResumoAssociado(protocolo){
+  const chamado = (meusChamadosList || []).find(c => c.protocolo === protocolo);
+  if(!chamado){ showToast('Chamado não encontrado. Refaça a busca e tente de novo.'); return; }
+  try{
+    renderSummaryCardOffscreen(chamado);
+    await captureSummaryAndDownload(protocolo);
+  } catch(err){
+    console.error('Erro ao gerar imagem do resumo', err);
+    showToast('Não foi possível gerar a imagem agora. Tente novamente.');
+  }
+}
+
 async function renderMeusChamados(){
   const q = document.getElementById('lookupInput').value.trim();
   const wrap = document.getElementById('ticketList');
@@ -1217,6 +1233,7 @@ async function renderMeusChamados(){
     if(!res.ok) throw new Error('Falha ao buscar chamados');
     const data = await res.json();
     const filtered = data.chamados;
+    meusChamadosList = filtered;
     document.getElementById('ticketEmpty').classList.toggle('hidden', filtered.length>0);
     wrap.innerHTML = filtered.map(c=>`
       <div class="ticket">
@@ -1239,7 +1256,10 @@ async function renderMeusChamados(){
           <button class="btn btn-outline btn-sm" onclick="document.getElementById('cmp-${c.protocolo}').click()">📎 ${c.temComprovante?'Trocar':'Anexar'} comprovante</button>
           <input type="file" id="cmp-${c.protocolo}" accept="image/*,application/pdf" style="display:none;" onchange="enviarComprovante('${c.protocolo}','${esc(c.matricula||'')}', this)">
         </div>` : ''}
-        ${c.status==='Concluído' && c.pagamento==='Pix' ? `<div style="margin-top:10px;"><button class="btn btn-outline btn-sm" onclick="baixarNotaDebitoAssociado('${c.protocolo}','${esc(c.matricula||'')}', this)">Baixar Nota de Débito</button></div>` : ''}
+        ${c.status==='Concluído' && c.pagamento==='Pix' ? `<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn btn-outline btn-sm" onclick="baixarNotaDebitoAssociado('${c.protocolo}','${esc(c.matricula||'')}', this)">Baixar Nota de Débito</button>
+          <button class="btn btn-outline btn-sm" onclick="baixarResumoAssociado('${c.protocolo}')">Baixar resumo (imagem)</button>
+        </div>` : ''}
       </div>
     `).join('');
   } catch(err){
