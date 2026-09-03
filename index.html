@@ -1459,15 +1459,15 @@ async function renderVendidos(){
   (adminChamadosList || []).filter(c=>c.status==='Concluído').forEach(c=>{
     (c.itens || []).forEach(it=>{
       linhas.push({
-        itemId: it.itemId, numero: it.numero, titulo: it.titulo, qtd: it.quantidade,
-        valor: it.preco * it.quantidade, nome: c.nome, setor: c.setor,
+        itemId: it.itemId, numero: it.numero, titulo: it.titulo, descricao: it.descricao || '',
+        qtd: it.quantidade, valor: it.preco * it.quantidade, nome: c.nome, setor: c.setor,
         protocolo: c.protocolo, data: c.dataAbertura,
       });
     });
   });
   linhas.sort((a,b)=>new Date(b.data) - new Date(a.data));
   const filtradas = linhas.filter(l=>{
-    const hay = (l.numero+' '+l.titulo+' '+l.nome+' '+l.protocolo+' '+(l.setor||'')).toLowerCase();
+    const hay = (l.numero+' '+l.titulo+' '+l.descricao+' '+l.nome+' '+l.protocolo+' '+(l.setor||'')).toLowerCase();
     return !vendidosSearch || hay.includes(vendidosSearch);
   });
   document.getElementById('vendidosCount').textContent =
@@ -1486,6 +1486,7 @@ async function renderVendidos(){
             <div><span class="mono" style="font-size:11.5px;color:var(--ink-soft);">Nº ${esc(l.numero)}</span> <strong style="margin-left:8px;">${esc(l.titulo)}</strong>${l.qtd>1 ? ` <span class="mono">(${l.qtd}x)</span>` : ''}</div>
             <span class="badge badge-done">Vendido</span>
           </div>
+          ${(l.descricao || (item && item.descricao)) ? `<div style="font-size:12.5px;color:var(--ink-soft);margin:2px 0 6px;">${esc(l.descricao || item.descricao)}</div>` : ''}
           <div class="dp-grid">
             <div><span>Comprador</span>${esc(l.nome)}</div>
             <div><span>Setor</span>${esc(l.setor||'-')}</div>
