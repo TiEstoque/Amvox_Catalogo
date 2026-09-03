@@ -418,6 +418,7 @@
           <div><h2 style="font-size:17px;margin:0;">Itens no catálogo</h2></div>
           <div class="search-box" style="max-width:280px;"><input type="text" id="manageSearch" placeholder="Buscar item..."></div>
         </div>
+        <div class="chip-row" id="manageChips" style="margin:0 0 12px;"></div>
         <div id="manageList"></div>
       </div>
 
@@ -1761,11 +1762,33 @@ async function addItem(){
 let manageSearchTerm = '';
 document.getElementById('manageSearch').addEventListener('input', e=>{ manageSearchTerm = e.target.value.trim().toLowerCase(); renderManageList(); });
 
+// Situação do item na gestão: Disponível / Reservado / Concluído / Esgotado
+let manageFilter = 'Todos';
+function estadoItem(i){
+  if(i.isStock) return i.availableQty > 0 ? 'Disponível' : 'Esgotado';
+  return i.itemStatus === 'Vendido' ? 'Concluído' : (i.itemStatus || 'Disponível');
+}
+
 function renderManageList(){
-  let items = effectiveCatalog.filter(i=>{
+  let base = effectiveCatalog.filter(i=>{
     const hay = (String(i.numero)+' '+i.titulo+' '+i.descricao).toLowerCase();
     return !manageSearchTerm || hay.includes(manageSearchTerm);
   });
+
+  const chipsWrap = document.getElementById('manageChips');
+  if(chipsWrap){
+    const rotulos = { 'Todos':'Todos', 'Disponível':'Disponíveis', 'Reservado':'Reservados', 'Concluído':'Concluídos', 'Esgotado':'Esgotados' };
+    const counts = { 'Todos': base.length };
+    base.forEach(i=>{ const e = estadoItem(i); counts[e] = (counts[e]||0) + 1; });
+    chipsWrap.innerHTML = Object.keys(rotulos)
+      .filter(e => e==='Todos' || counts[e])
+      .map(e=>`<button class="chip ${e===manageFilter?'active':''}" data-mf="${e}">${rotulos[e]} (${counts[e]||0})</button>`).join('');
+    chipsWrap.querySelectorAll('.chip').forEach(ch=>{
+      ch.addEventListener('click', ()=>{ manageFilter = ch.dataset.mf; renderManageList(); });
+    });
+  }
+
+  let items = manageFilter==='Todos' ? base : base.filter(i=>estadoItem(i)===manageFilter);
   const wrap = document.getElementById('manageList');
   if(!wrap) return;
   wrap.innerHTML = items.map(i=>{
