@@ -429,8 +429,12 @@
         </div>
         <div class="panel-head">
           <div><h2 style="font-size:17px;margin:0;">Itens no catálogo</h2></div>
-          <div class="search-box" style="max-width:280px;"><input type="text" id="manageSearch" placeholder="Buscar item..."></div>
+          <div style="display:flex;gap:10px;align-items:center;">
+            <button class="btn btn-outline btn-sm" onclick="toggleHistoricoBaixas()">🧾 Histórico de baixas</button>
+            <div class="search-box" style="max-width:280px;"><input type="text" id="manageSearch" placeholder="Buscar item..."></div>
+          </div>
         </div>
+        <div id="baixasHistorico" class="hidden" style="margin-bottom:14px;"></div>
         <div class="chip-row" id="manageChips" style="margin:0 0 12px;"></div>
         <div id="manageList"></div>
       </div>
@@ -1903,11 +1907,63 @@ function renderManageList(){
       <div class="price" style="font-family:'Space Grotesk';font-weight:700;">${brl(i.preco)}</div>
       <div class="actions">
         <button class="btn btn-outline btn-sm" onclick="toggleEdit('${i.id}')">Editar</button>
+        ${i.isStock ? `<button class="btn btn-outline btn-sm" onclick="baixaInterna('${i.id}')">Baixa interna</button>` : ''}
         <button class="btn btn-danger-outline btn-sm" onclick="removeItem('${i.id}')">Remover</button>
       </div>
       <div class="edit-box hidden" id="edit-${i.id}"></div>
     </div>`;
   }).join('') || '<p style="color:var(--ink-soft);">Nenhum item encontrado.</p>';
+}
+
+/* ============ BAIXA DE USO INTERNO ============ */
+async function baixaInterna(itemId){
+  const i = effectiveCatalog.find(x=>x.id===itemId);
+  if(!i) return;
+  const qtdStr = prompt(`Baixa interna de "${i.titulo}"\n\nQuantas unidades? (disponíveis: ${i.availableQty})`, '1');
+  if(qtdStr === null) return;
+  const quantidade = parseInt(qtdStr, 10);
+  if(!quantidade || quantidade < 1){ showToast('Quantidade inválida.'); return; }
+  const motivo = prompt('Motivo da baixa (ex.: usado em manutenção de máquina do setor X):');
+  if(motivo === null) return;
+  if(!motivo.trim()){ showToast('Informe o motivo.'); return; }
+  const responsavel = prompt('Responsável pela baixa:', 'Diego Barreto (TI)');
+  if(responsavel === null) return;
+  try{
+    const res = await fetch('/api/baixas', {
+      method: 'POST',
+      headers: Object.assign({'Content-Type':'application/json'}, adminHeaders()),
+      body: JSON.stringify({ itemId, quantidade, motivo: motivo.trim(), responsavel: responsavel.trim() })
+    });
+    const data = await res.json();
+    if(!res.ok) throw new Error(data.error || 'Falha ao registrar a baixa.');
+    showToast(`Baixa registrada ✓ — estoque de "${i.titulo}" agora: ${data.estoqueNovo}`);
+    await loadCatalog();
+    buildChips(); renderGrid(); renderManageList();
+  }catch(err){
+    showToast(err.message || 'Não foi possível registrar a baixa.');
+  }
+}
+
+async function toggleHistoricoBaixas(){
+  const box = document.getElementById('baixasHistorico');
+  if(!box.classList.contains('hidden')){ box.classList.add('hidden'); return; }
+  box.innerHTML = '<p style="color:var(--ink-soft);">Carregando...</p>';
+  box.classList.remove('hidden');
+  try{
+    const res = await fetch('/api/baixas', { headers: adminHeaders() });
+    const data = await res.json();
+    if(!res.ok) throw new Error(data.error || 'Falha ao carregar o histórico.');
+    box.innerHTML = (data.baixas || []).map(b=>`
+      <div class="dp-row" style="padding:10px 14px;">
+        <div class="dp-row-top">
+          <div><strong>${esc(b.item_titulo)}</strong> <span class="mono">(${b.quantidade}x)</span></div>
+          <span style="font-size:12px;color:var(--ink-soft);">${new Date(b.criado_em).toLocaleString('pt-BR')}</span>
+        </div>
+        <div style="font-size:12.5px;color:var(--ink-soft);">Motivo: ${esc(b.motivo || '—')} · Responsável: ${esc(b.responsavel || '—')}</div>
+      </div>`).join('') || '<p style="color:var(--ink-soft);">Nenhuma baixa interna registrada ainda.</p>';
+  }catch(err){
+    box.innerHTML = `<p style="color:var(--danger);">${esc(err.message)}</p>`;
+  }
 }
 
 function toggleEdit(id){
