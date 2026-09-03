@@ -1631,6 +1631,7 @@ async function renderDP(){
       ${actions}
     </div>`;
   }).join('');
+  renderManageList(); // atualiza a gestão com os dados de venda recém-carregados
 }
 
 async function baixarNotaDebito(protocolo, btnEl){
@@ -1793,11 +1794,16 @@ function renderManageList(){
   if(!wrap) return;
   wrap.innerHTML = items.map(i=>{
     const statusTxt = i.isStock ? `${i.availableQty}/${i.estoque} disponíveis` : (i.itemStatus==='Vendido' ? 'Concluído' : i.itemStatus);
+    // Item vendido: mostra pra quem foi, em qual chamado e quando
+    const venda = estadoItem(i)==='Concluído'
+      ? (adminChamadosList || []).find(c=>c.status==='Concluído' && (c.itens||[]).some(it=>it.itemId===i.id))
+      : null;
     return `
     <div class="manage-row" id="row-${i.id}">
       <div class="info">
         <div class="t1"><span class="mono">Nº ${esc(i.numero)}</span> — ${esc(i.titulo)} ${i.isCustom ? '<span class="badge-custom">Novo</span>':''} ${i.condicao ? `<span class="badge-condicao ${i.condicao==='Novo'?'bc-novo':'bc-defeito'}" style="margin-top:0;">${esc(i.condicao)}</span>`:''}</div>
         <div class="t2">${esc(i.categoria)} · ${esc(i.descricao)} · ${esc(statusTxt)}</div>
+        ${venda ? `<div class="t2" style="color:#5B3FA0;font-weight:700;">🧾 Vendido para ${esc(venda.nome)} · ${venda.protocolo} · ${new Date(venda.dataAbertura).toLocaleDateString('pt-BR')} · ${brl(venda.valorTotal)} no chamado</div>` : ''}
       </div>
       <div class="price" style="font-family:'Space Grotesk';font-weight:700;">${brl(i.preco)}</div>
       <div class="actions">
