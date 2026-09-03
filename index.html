@@ -1199,6 +1199,7 @@ async function renderMeusChamados(){
         <div class="items-list">${c.itens.map(it=>`Nº ${esc(it.numero)} — ${esc(it.titulo)} (${it.quantidade}x)`).join(' · ')}</div>
         <div style="margin-top:8px;" class="val">Total: ${brl(c.valorTotal)}</div>
         ${c.status==='Aguardando pagamento Pix' ? `<div style="margin-top:8px;font-size:12px;color:var(--ink-soft);">Falta o comprovante do Pix nesta reserva. Chave (CNPJ): <b class="mono">${CHAVE_PIX}</b> · Valor: <b>${brl(c.valorTotal)}</b></div>
+        <div style="margin-top:6px;font-size:12.5px;font-weight:700;color:var(--danger);">⏳ Tempo restante da reserva: <span class="tempo-reserva" data-abertura="${c.dataAbertura}">${tempoRestanteReserva(c.dataAbertura)}</span> — anexe o comprovante antes de expirar.</div>
         <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">
           <button class="btn btn-primary btn-sm" onclick="document.getElementById('cmp-${c.protocolo}').click()">📎 Anexar comprovante do Pix</button>
           <input type="file" id="cmp-${c.protocolo}" accept="image/*,application/pdf" style="display:none;" onchange="enviarComprovante('${c.protocolo}','${esc(c.matricula||'')}', this)">
@@ -1251,6 +1252,23 @@ async function baixarNotaDebitoAssociado(protocolo, matricula, btnEl){
     btnEl.disabled = false;
   }
 }
+
+/* ============ TEMPO RESTANTE PRA PAGAR (reservas pendentes) ============ */
+// Reserva sem comprovante expira 48h após a abertura (cancelamento
+// automático no banco). Aqui mostramos o tempo que resta pra pessoa pagar.
+function tempoRestanteReserva(dataAbertura){
+  const fim = new Date(dataAbertura).getTime() + 48 * 3600 * 1000;
+  const resta = fim - Date.now();
+  if(resta <= 0) return 'expirando...';
+  const h = Math.floor(resta / 3600000);
+  const m = Math.floor((resta % 3600000) / 60000);
+  return (h > 0 ? h + 'h ' : '') + m + 'min';
+}
+setInterval(()=>{
+  document.querySelectorAll('.tempo-reserva').forEach(el=>{
+    el.textContent = tempoRestanteReserva(el.dataset.abertura);
+  });
+}, 30000);
 
 /* ============ COMPROVANTE DO PIX ============ */
 function fileToBase64(file){
@@ -1573,6 +1591,7 @@ async function renderDP(){
         <div><span>Valor total</span>${brl(c.valorTotal)}</div>
         <div><span>Pagamento</span>${esc(c.pagamento)}${c.parcelas ? ' · '+c.parcelas+'x de '+brl(c.valorParcela):''}</div>
         <div><span>Data de abertura</span>${new Date(c.dataAbertura).toLocaleString('pt-BR')}</div>
+        ${c.status==='Aguardando pagamento Pix' ? `<div><span>Tempo pra pagar</span><b style="color:var(--danger);" class="tempo-reserva" data-abertura="${c.dataAbertura}">${tempoRestanteReserva(c.dataAbertura)}</b></div>` : ''}
         <div><span>Observação DP</span>${c.observacaoDP ? esc(c.observacaoDP) : '—'}</div>
       </div>
       <div class="dp-actions">
