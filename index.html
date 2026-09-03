@@ -370,6 +370,7 @@
       <div class="subtabs">
         <button class="subtab-btn active" data-sub="chamados" onclick="switchAdminSub('chamados')">Chamados / Reservas</button>
         <button class="subtab-btn" data-sub="catalogo" onclick="switchAdminSub('catalogo')">Gerenciar catálogo</button>
+        <button class="subtab-btn" data-sub="vendidos" onclick="switchAdminSub('vendidos')">Itens vendidos</button>
         <button class="subtab-btn" data-sub="usuarios" onclick="switchAdminSub('usuarios')">Usuários</button>
         <button class="subtab-btn" data-sub="vendas" onclick="switchAdminSub('vendas')">Vendas</button>
       </div>
@@ -380,6 +381,18 @@
         <div class="chip-row" id="dpFilterChips" style="margin-bottom:16px;"></div>
         <div id="dpList"></div>
         <div class="empty hidden" id="dpEmpty"><div class="big">📭</div>Nenhum chamado nessa categoria.</div>
+      </div>
+
+      <!-- Sub: Itens vendidos (conferência) -->
+      <div id="admin-sub-vendidos" class="hidden">
+        <div class="panel-head">
+          <div>
+            <h2 style="font-size:17px;margin:0;">Itens vendidos</h2>
+            <p id="vendidosCount" style="color:var(--ink-soft);font-size:12.8px;margin:4px 0 0;"></p>
+          </div>
+          <div class="search-box" style="max-width:300px;"><input type="text" id="vendidosSearch" placeholder="Buscar por item, nº, comprador, protocolo..."></div>
+        </div>
+        <div id="vendidosList"></div>
       </div>
 
       <!-- Sub: Catálogo -->
@@ -1421,13 +1434,63 @@ function switchAdminSub(name){
   document.querySelectorAll('.subtab-btn').forEach(b=>b.classList.toggle('active', b.dataset.sub===name));
   document.getElementById('admin-sub-chamados').classList.toggle('hidden', name!=='chamados');
   document.getElementById('admin-sub-catalogo').classList.toggle('hidden', name!=='catalogo');
+  document.getElementById('admin-sub-vendidos').classList.toggle('hidden', name!=='vendidos');
   document.getElementById('admin-sub-usuarios').classList.toggle('hidden', name!=='usuarios');
   document.getElementById('admin-sub-vendas').classList.toggle('hidden', name!=='vendas');
   if(name==='chamados') renderDP();
   else if(name==='catalogo') renderManageList();
+  else if(name==='vendidos') renderVendidos();
   else if(name==='usuarios') renderUsuarios();
   else renderVendas();
 }
+
+/* ============ ITENS VENDIDOS (conferência) ============ */
+let vendidosSearch = '';
+async function renderVendidos(){
+  const wrap = document.getElementById('vendidosList');
+  if(!wrap) return;
+  if(!(adminChamadosList || []).length){
+    try{
+      const res = await fetch('/api/reservas', { headers: adminHeaders() });
+      if(res.ok) adminChamadosList = (await res.json()).chamados;
+    }catch(err){ console.error('Erro ao carregar chamados', err); }
+  }
+  const linhas = [];
+  (adminChamadosList || []).filter(c=>c.status==='Concluído').forEach(c=>{
+    (c.itens || []).forEach(it=>{
+      linhas.push({
+        numero: it.numero, titulo: it.titulo, qtd: it.quantidade,
+        valor: it.preco * it.quantidade, nome: c.nome, setor: c.setor,
+        protocolo: c.protocolo, data: c.dataAbertura,
+      });
+    });
+  });
+  linhas.sort((a,b)=>new Date(b.data) - new Date(a.data));
+  const filtradas = linhas.filter(l=>{
+    const hay = (l.numero+' '+l.titulo+' '+l.nome+' '+l.protocolo+' '+(l.setor||'')).toLowerCase();
+    return !vendidosSearch || hay.includes(vendidosSearch);
+  });
+  document.getElementById('vendidosCount').textContent =
+    `${filtradas.length} ${filtradas.length===1 ? 'item vendido' : 'itens vendidos'} · Total ${brl(filtradas.reduce((a,l)=>a+l.valor,0))}`;
+  wrap.innerHTML = filtradas.map(l=>`
+    <div class="dp-row">
+      <div class="dp-row-top">
+        <div><span class="mono" style="font-size:11.5px;color:var(--ink-soft);">Nº ${esc(l.numero)}</span> <strong style="margin-left:8px;">${esc(l.titulo)}</strong>${l.qtd>1 ? ` <span class="mono">(${l.qtd}x)</span>` : ''}</div>
+        <span class="badge badge-done">Vendido</span>
+      </div>
+      <div class="dp-grid">
+        <div><span>Comprador</span>${esc(l.nome)}</div>
+        <div><span>Setor</span>${esc(l.setor||'-')}</div>
+        <div><span>Protocolo</span><span class="mono">${l.protocolo}</span></div>
+        <div><span>Data</span>${new Date(l.data).toLocaleDateString('pt-BR')}</div>
+        <div><span>Valor</span>${brl(l.valor)}</div>
+      </div>
+    </div>`).join('') || '<p style="color:var(--ink-soft);">Nenhum item vendido encontrado.</p>';
+}
+document.getElementById('vendidosSearch').addEventListener('input', e=>{
+  vendidosSearch = e.target.value.trim().toLowerCase();
+  renderVendidos();
+});
 
 /* ============ VENDAS (dashboard) ============ */
 // Paleta validada (banda de luminosidade, croma, separação CVD e contraste)
