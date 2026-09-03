@@ -791,7 +791,7 @@ function openReservaModal(){
   renderReservaForm();
   overlay.classList.remove('hidden');
 }
-function closeModal(){ overlay.classList.add('hidden'); modalContent.innerHTML=''; }
+function closeModal(){ if(typeof pararContagem === 'function') pararContagem(); overlay.classList.add('hidden'); modalContent.innerHTML=''; }
 overlay.addEventListener('click', e=>{ if(e.target===overlay) closeModal(); });
 
 function cartTotal(){
@@ -819,31 +819,17 @@ function renderReservaForm(){
       <div class="field"><label>CPF</label><input type="text" id="fMatricula" placeholder="000.000.000-00"></div>
       <div class="field"><label>Setor</label><input type="text" id="fSetor" placeholder="Ex: Financeiro"></div>
       <div id="saldoBox" class="sim-box" style="margin-bottom:12px;">Informe seu CPF acima para verificar quantos itens você ainda pode comprar.</div>
-      <div id="pixBox" class="hidden">
-        <div class="sim-box sim-ok" style="margin-bottom:12px;">
-          <b>1. Pague agora via Pix</b><br>
-          Chave (CNPJ): <b class="mono">${CHAVE_PIX}</b>
-          <button class="btn btn-outline btn-sm" style="margin-left:6px;" onclick="copiarChavePix(this)">Copiar chave</button><br>
-          Valor: <b>${brl(total)}</b>
-        </div>
-        <div class="field">
-          <label>2. Anexe o comprovante do Pix (obrigatório)</label>
-          <input type="file" id="fComprovante" accept="image/*,application/pdf">
-          <p style="font-size:11.5px;color:var(--ink-soft);margin-top:4px;">Sem o comprovante não é possível reservar. Ao confirmar, a compra é concluída na hora e a Nota de Débito liberada.</p>
-        </div>
-      </div>
       <div id="simBox"></div>
       <div id="formError" class="hidden sim-box sim-warn"></div>
     </div>
     <div class="modal-foot">
       <button class="btn btn-outline" onclick="closeModal()">Cancelar</button>
-      <button class="btn btn-primary" id="submitBtn" disabled onclick="submitReserva()">Confirmar reserva</button>
+      <button class="btn btn-primary" id="submitBtn" disabled onclick="irParaPagamento()">Continuar para pagamento →</button>
     </div>
   `;
   document.getElementById('fNome').addEventListener('input', validateForm);
   document.getElementById('fMatricula').addEventListener('input', ()=>{ validateForm(); clearTimeout(saldoTimer); saldoTimer = setTimeout(verificarSaldo, 600); });
   document.getElementById('fSetor').addEventListener('input', validateForm);
-  document.getElementById('fComprovante').addEventListener('change', validateForm);
   updateSimulation();
 
   const gateData = JSON.parse(sessionStorage.getItem('amvox_gate_data') || 'null');
@@ -851,9 +837,82 @@ function renderReservaForm(){
     document.getElementById('fNome').value = gateData.nome || '';
     document.getElementById('fMatricula').value = gateData.cpf || '';
     document.getElementById('fSetor').value = gateData.setor || '';
-    validateForm();
   }
+  if(reservaDados){
+    document.getElementById('fNome').value = reservaDados.nome || document.getElementById('fNome').value;
+    document.getElementById('fMatricula').value = reservaDados.matricula || document.getElementById('fMatricula').value;
+    document.getElementById('fSetor').value = reservaDados.setor || document.getElementById('fSetor').value;
+  }
+  validateForm();
   verificarSaldo();
+}
+
+/* ===== ETAPA 2: PAGAMENTO COM CONTAGEM REGRESSIVA (20 min) ===== */
+let reservaDados = null;
+let pagamentoTimer = null;
+
+function irParaPagamento(){
+  reservaDados = {
+    nome: document.getElementById('fNome').value.trim(),
+    matricula: document.getElementById('fMatricula').value.trim(),
+    setor: document.getElementById('fSetor').value.trim(),
+  };
+  renderPagamento();
+}
+
+function pararContagem(){
+  if(pagamentoTimer){ clearInterval(pagamentoTimer); pagamentoTimer = null; }
+}
+
+function renderPagamento(){
+  const total = cartTotal();
+  modalContent.innerHTML = `
+    <div class="modal-head"><h2>Pagamento da reserva</h2></div>
+    <div class="modal-body">
+      <div style="text-align:center;margin-bottom:14px;">
+        <div style="font-size:13px;color:var(--ink-soft);margin-bottom:2px;">Tempo restante para pagar e anexar o comprovante</div>
+        <div id="pagCountdown" style="font-size:42px;font-weight:800;letter-spacing:2px;color:var(--primary);">20:00</div>
+        <div style="font-size:12px;color:var(--ink-soft);">Ao esgotar o tempo, esta tela expira e será preciso refazer a reserva.</div>
+      </div>
+      <div class="sim-box sim-ok" style="margin-bottom:12px;">
+        <b>1. Pague agora via Pix</b><br>
+        Chave (CNPJ): <b class="mono">${CHAVE_PIX}</b>
+        <button class="btn btn-outline btn-sm" style="margin-left:6px;" onclick="copiarChavePix(this)">Copiar chave</button><br>
+        Valor: <b>${brl(total)}</b>
+      </div>
+      <div class="field">
+        <label>2. Anexe o comprovante do Pix (obrigatório)</label>
+        <input type="file" id="fComprovante" accept="image/*,application/pdf">
+        <p style="font-size:11.5px;color:var(--ink-soft);margin-top:4px;">Sem o comprovante não é possível confirmar a reserva. Ao confirmar, a compra é concluída na hora e a Nota de Débito liberada.</p>
+      </div>
+      <div id="formError" class="hidden sim-box sim-warn"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-outline" onclick="pararContagem(); renderReservaForm();">← Voltar</button>
+      <button class="btn btn-primary" id="btnConfirmarPag" disabled onclick="submitReserva()">Confirmar reserva</button>
+    </div>
+  `;
+  document.getElementById('fComprovante').addEventListener('change', ()=>{
+    const btn = document.getElementById('btnConfirmarPag');
+    if(btn) btn.disabled = !document.getElementById('fComprovante')?.files?.length;
+  });
+
+  pararContagem();
+  const fim = Date.now() + 20 * 60 * 1000;
+  pagamentoTimer = setInterval(()=>{
+    const resta = Math.max(0, Math.round((fim - Date.now()) / 1000));
+    const el = document.getElementById('pagCountdown');
+    if(!el){ pararContagem(); return; }
+    const mm = String(Math.floor(resta / 60)).padStart(2, '0');
+    const ss = String(resta % 60).padStart(2, '0');
+    el.textContent = mm + ':' + ss;
+    if(resta <= 120) el.style.color = 'var(--danger)';
+    if(resta <= 0){
+      pararContagem();
+      showToast('⏰ Tempo esgotado! Refaça a reserva.');
+      renderReservaForm();
+    }
+  }, 1000);
 }
 
 /* Saldo de itens do limite por pessoa: consulta antes de liberar o Pix,
@@ -862,15 +921,13 @@ let saldoTimer = null;
 let saldoDisponivel = null; // null = ainda não verificado
 async function verificarSaldo(){
   const box = document.getElementById('saldoBox');
-  const pixBox = document.getElementById('pixBox');
-  if(!box || !pixBox) return;
+  if(!box) return;
   const cpf = (document.getElementById('fMatricula')?.value || '').replace(/\D/g,'');
   const qtd = cart.reduce((a,c)=>a+c.quantidade,0);
   saldoDisponivel = null;
   if(cpf.length < 11){
     box.className = 'sim-box';
     box.innerHTML = 'Informe seu CPF acima para verificar quantos itens você ainda pode comprar.';
-    pixBox.classList.add('hidden');
     validateForm();
     return;
   }
@@ -883,24 +940,20 @@ async function verificarSaldo(){
     if(d.disponivel <= 0){
       saldoDisponivel = 0;
       box.className = 'sim-box sim-warn';
-      box.innerHTML = `🚫 <b>Você já usou o limite de ${d.limite} itens</b> (somando reservas e compras). <b>Não faça o pagamento</b> — não é possível reservar. Dúvidas? Procure a TI.`;
-      pixBox.classList.add('hidden');
+      box.innerHTML = `🚫 <b>Você já usou o limite de ${d.limite} itens</b> (somando reservas e compras). Não é possível reservar. Dúvidas? Procure a TI.`;
     } else if(qtd > d.disponivel){
       saldoDisponivel = d.disponivel;
       box.className = 'sim-box sim-warn';
-      box.innerHTML = `⚠️ Esta reserva tem <b>${qtd} itens</b>, mas você só pode comprar mais <b>${d.disponivel}</b> (limite de ${d.limite}; já usou ${d.usados}). <b>Ajuste o carrinho antes de fazer o pagamento.</b>`;
-      pixBox.classList.add('hidden');
+      box.innerHTML = `⚠️ Esta reserva tem <b>${qtd} itens</b>, mas você só pode comprar mais <b>${d.disponivel}</b> (limite de ${d.limite}; já usou ${d.usados}). <b>Ajuste o carrinho para continuar.</b>`;
     } else {
       saldoDisponivel = d.disponivel;
       box.className = 'sim-box sim-ok';
-      box.innerHTML = `✅ Você ainda pode comprar <b>${d.disponivel} de ${d.limite} itens</b>${d.usados ? ` (já usou ${d.usados})` : ''}. Esta reserva usa <b>${qtd}</b> — pode pagar tranquilo. 👇`;
-      pixBox.classList.remove('hidden');
+      box.innerHTML = `✅ Você ainda pode comprar <b>${d.disponivel} de ${d.limite} itens</b>${d.usados ? ` (já usou ${d.usados})` : ''}. Esta reserva usa <b>${qtd}</b> — clique em "Continuar para pagamento".`;
     }
   }catch(err){
     console.error('Erro ao verificar saldo', err);
     box.className = 'sim-box sim-warn';
     box.innerHTML = 'Não foi possível verificar seu saldo agora. Tente de novo em instantes.';
-    pixBox.classList.add('hidden');
   }
   validateForm();
 }
@@ -908,7 +961,7 @@ async function verificarSaldo(){
 function updateSimulation(){
   const box = document.getElementById('simBox');
   if(!box) return;
-  box.innerHTML = `<div class="sim-box sim-ok"><b>${brl(cartTotal())}</b> à vista via Pix. Pague, anexe o comprovante e a compra é confirmada na hora.</div>`;
+  box.innerHTML = `<div class="sim-box sim-ok"><b>${brl(cartTotal())}</b> à vista via Pix. O pagamento é feito na próxima etapa, com <b>20 minutos</b> para pagar e anexar o comprovante.</div>`;
 }
 
 function validateForm(){
@@ -917,23 +970,20 @@ function validateForm(){
   const nome = document.getElementById('fNome')?.value.trim();
   const matricula = document.getElementById('fMatricula')?.value.trim();
   const setor = document.getElementById('fSetor')?.value.trim();
-  const temComprovante = !!document.getElementById('fComprovante')?.files?.length;
   const qtd = cart.reduce((a,c)=>a+c.quantidade,0);
   const temSaldo = saldoDisponivel !== null && saldoDisponivel > 0 && qtd <= saldoDisponivel;
-  const ok = nome && matricula && setor && currentPagamento && temComprovante && temSaldo;
+  const ok = nome && matricula && setor && currentPagamento && temSaldo;
   btn.disabled = !ok;
 }
 
 async function submitReserva(){
-  const btn = document.getElementById('submitBtn');
+  const btn = document.getElementById('btnConfirmarPag');
   const originalLabel = btn.textContent;
   btn.disabled = true;
   btn.textContent = 'Enviando...';
   clearFormError();
 
-  const nome = document.getElementById('fNome').value.trim();
-  const matricula = document.getElementById('fMatricula').value.trim();
-  const setor = document.getElementById('fSetor').value.trim();
+  const { nome, matricula, setor } = reservaDados || {};
   const payload = {
     nome, matricula, setor,
     pagamento: 'Pix',
@@ -965,6 +1015,8 @@ async function submitReserva(){
     const data = await res.json();
     if(!res.ok) throw new Error(data.error || 'Falha ao salvar a reserva.');
 
+    pararContagem();
+    reservaDados = null;
     cart = [];
     await loadCatalog();
     buildChips(); renderGrid(); renderCartBar();
