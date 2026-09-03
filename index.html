@@ -334,6 +334,7 @@
     <div class="controls">
       <div class="search-box"><input type="text" id="searchInput" placeholder="Buscar por número, modelo ou descrição..."></div>
       <div class="chip-row" id="catChips"></div>
+      <div class="chip-row hidden" id="sizeChips" style="width:100%;align-items:center;"></div>
     </div>
 
     <div class="grid" id="grid"></div>
@@ -694,7 +695,17 @@ function prefillMeusChamados(){
 }
 
 /* ============ CATALOGO / CART ============ */
-let activeCat = 'Todos', searchTerm = '';
+let activeCat = 'Todos', searchTerm = '', activeSize = 'Todos';
+
+// Extrai o tamanho da tela (ex.: 18,5 / 21 / 21,5 / 24) da descrição de um
+// monitor, ignorando códigos de modelo (2270SWHEN, 22B30HM2 etc.).
+function tamanhoMonitor(i){
+  if(!/monitor/i.test(`${i.titulo || ''} ${i.categoria || ''} ${i.descricao || ''}`)) return null;
+  // só a descrição: o título ("Monitor #21") tem número de patrimônio, não tamanho
+  const m = String(i.descricao || '').match(/\b(1[4-9]|2[0-9]|3[0-4])([.,]5)?(?![0-9A-Za-z])/);
+  if(!m) return null;
+  return m[1] + (m[2] ? ',5' : '');
+}
 
 function buildChips(){
   const cats = [...new Set(effectiveCatalog.map(i=>i.categoria))];
@@ -703,6 +714,22 @@ function buildChips(){
   chipsWrap.innerHTML = all.map(c=>`<button class="chip ${c===activeCat?'active':''}" data-cat="${esc(c)}">${esc(c)}</button>`).join('');
   chipsWrap.querySelectorAll('.chip').forEach(ch=>{
     ch.addEventListener('click', ()=>{ activeCat = ch.dataset.cat; buildChips(); renderGrid(); });
+  });
+  buildSizeChips();
+}
+
+function buildSizeChips(){
+  const wrap = document.getElementById('sizeChips');
+  if(!wrap) return;
+  const tamanhos = [...new Set(effectiveCatalog.map(tamanhoMonitor).filter(Boolean))]
+    .sort((a,b)=>parseFloat(a.replace(',','.')) - parseFloat(b.replace(',','.')));
+  if(!tamanhos.length){ wrap.classList.add('hidden'); return; }
+  wrap.classList.remove('hidden');
+  const all = ['Todos', ...tamanhos];
+  wrap.innerHTML = `<span style="font-size:12.5px;font-weight:700;color:var(--ink-soft);margin-right:2px;">📐 Tamanho do monitor:</span>` +
+    all.map(t=>`<button class="chip ${t===activeSize?'active':''}" data-size="${esc(t)}">${t==='Todos'?'Todos':t+'"'}</button>`).join('');
+  wrap.querySelectorAll('.chip').forEach(ch=>{
+    ch.addEventListener('click', ()=>{ activeSize = ch.dataset.size; buildSizeChips(); renderGrid(); });
   });
 }
 document.getElementById('searchInput').addEventListener('input', e=>{ searchTerm = e.target.value.trim().toLowerCase(); renderGrid(); });
@@ -743,7 +770,8 @@ function renderGrid(){
     const matchCat = activeCat==='Todos' || i.categoria===activeCat;
     const hay = (String(i.numero)+' '+i.titulo+' '+i.descricao).toLowerCase();
     const matchSearch = !searchTerm || hay.includes(searchTerm);
-    return matchCat && matchSearch;
+    const matchSize = activeSize==='Todos' || tamanhoMonitor(i)===activeSize;
+    return matchCat && matchSearch && matchSize;
   });
   document.getElementById('resultCount').textContent = items.length + (items.length===1 ? ' item no catálogo' : ' itens no catálogo');
   const grid = document.getElementById('grid');
