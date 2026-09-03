@@ -1198,10 +1198,9 @@ async function renderMeusChamados(){
         <div class="meta">${esc(c.pagamento)}${c.parcelas ? ' · '+c.parcelas+'x de '+brl(c.valorParcela) : ''} · ${new Date(c.dataAbertura).toLocaleDateString('pt-BR')}</div>
         <div class="items-list">${c.itens.map(it=>`Nº ${esc(it.numero)} — ${esc(it.titulo)} (${it.quantidade}x)`).join(' · ')}</div>
         <div style="margin-top:8px;" class="val">Total: ${brl(c.valorTotal)}</div>
-        ${c.status==='Aguardando pagamento Pix' ? `<div style="margin-top:8px;font-size:12px;color:var(--ink-soft);">Chave Pix (CNPJ): <b class="mono">${CHAVE_PIX}</b> · Valor: <b>${brl(c.valorTotal)}</b><br>⏰ Reserva válida até <b>${new Date(new Date(c.dataAbertura).getTime() + 48*3600*1000).toLocaleString('pt-BR')}</b> — depois disso os itens voltam pro catálogo.</div>
+        ${c.status==='Aguardando pagamento Pix' ? `<div style="margin-top:8px;font-size:12px;color:var(--ink-soft);">Falta o comprovante do Pix nesta reserva. Chave (CNPJ): <b class="mono">${CHAVE_PIX}</b> · Valor: <b>${brl(c.valorTotal)}</b></div>
         <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">
           <button class="btn btn-primary btn-sm" onclick="document.getElementById('cmp-${c.protocolo}').click()">📎 Anexar comprovante do Pix</button>
-          <button class="btn btn-outline btn-sm" onclick="informarPix('${c.protocolo}','${esc(c.matricula||'')}')">Já fiz o Pix (sem comprovante)</button>
           <input type="file" id="cmp-${c.protocolo}" accept="image/*,application/pdf" style="display:none;" onchange="enviarComprovante('${c.protocolo}','${esc(c.matricula||'')}', this)">
         </div>` : ''}
         ${c.status==='Pix informado' ? `<div style="margin-top:8px;font-size:12px;color:var(--ink-soft);">Pagamento informado — aguardando confirmação da TI.</div>
