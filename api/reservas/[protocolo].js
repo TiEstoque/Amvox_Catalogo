@@ -5,6 +5,7 @@
 import { getSupabase } from '../_supabase.js';
 import { requireAdmin } from '../_admin.js';
 import { concluirChamado } from '../_concluir.js';
+import { enviarEmail, emailConfigurado } from '../_email.js';
 
 const ALLOWED_STATUS = ['Aprovado pelo DP', 'Reprovado pelo DP', 'Concluído', 'Cancelado'];
 
@@ -98,9 +99,14 @@ export default async function handler(req, res) {
       .eq('chamado_protocolo', protocolo);
     if (itensErr) throw itensErr;
 
+    const retirada = String(body.retirada || '').trim();
+
     const updatePayload = { status };
     if (observacaoDP !== undefined && observacaoDP !== null && observacaoDP !== '') {
       updatePayload.observacao_dp = observacaoDP;
+    }
+    if (status === 'Concluído' && retirada) {
+      updatePayload.retirada_info = retirada;
     }
     const { error: updErr } = await supabase.from('chamados').update(updatePayload).eq('protocolo', protocolo);
     if (updErr) throw updErr;
@@ -123,9 +129,45 @@ export default async function handler(req, res) {
         }
       }
     } else if (status === 'Concluído') {
-      // vendido + ND + e-mail — mesma rotina da confirmação automática
-      // por comprovante (api/_concluir.js)
+      // marca vendido e garante a ND (api/_concluir.js)
       notaDebitoNumero = await concluirChamado({ supabase, chamado, itens });
+
+      // avisa o comprador por e-mail que o produto está liberado pra retirada
+      if (chamado.email) {
+        try {
+          if (emailConfigurado()) {
+            const itensTxt = itens
+              .map((it) => `  - ${it.is_stock ? '' : `Nº ${it.numero} — `}${it.titulo}${it.quantidade > 1 ? ` (${it.quantidade}x)` : ''}`)
+              .join('\n');
+            await enviarEmail({
+              para: chamado.email,
+              assunto: `✅ Sua compra está liberada para retirada — ${protocolo}`,
+              texto: [
+                `Olá, ${chamado.nome}!`,
+                ``,
+                `Sua compra no Catálogo de Vendas Internas da Amvox foi conferida e está LIBERADA para retirada.`,
+                ``,
+                retirada ? `🕓 Horário de retirada: ${retirada}` : `🕓 Horário de retirada: combinar com a TI`,
+                `📍 Local: sala do estoque de TI (próximo aos relógios de ponto), com o TI Diego Barreto.`,
+                ``,
+                `Compra ${protocolo}:`,
+                itensTxt,
+                `Valor: R$ ${Number(chamado.valor_total).toFixed(2).replace('.', ',')}`,
+                ``,
+                `O equipamento é testado na hora, junto com você.`,
+                `Não esqueça: apresente a Nota de Débito na portaria ao sair (baixe em "Meus chamados" no catálogo).`,
+                ``,
+                `TI Amvox`,
+              ].join('\n'),
+              anexos: [],
+            });
+          } else {
+            console.warn('Aviso de retirada não enviado (e-mail não configurado):', protocolo);
+          }
+        } catch (avisoErr) {
+          console.error('Erro ao enviar aviso de retirada', protocolo, avisoErr);
+        }
+      }
     }
 
     return res.status(200).json({ protocolo, status, notaDebitoNumero });

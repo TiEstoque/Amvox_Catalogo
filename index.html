@@ -865,6 +865,7 @@ function renderReservaForm(){
       <div class="field"><label>Nome completo</label><input type="text" id="fNome" placeholder="Seu nome completo"></div>
       <div class="field"><label>CPF</label><input type="text" id="fMatricula" placeholder="000.000.000-00"></div>
       <div class="field"><label>Setor</label><input type="text" id="fSetor" placeholder="Ex: Financeiro"></div>
+      <div class="field"><label>E-mail (pra avisar quando o produto estiver liberado)</label><input type="email" id="fEmail" placeholder="seuemail@exemplo.com"></div>
       <div id="saldoBox" class="sim-box" style="margin-bottom:12px;">Informe seu CPF acima para verificar quantos itens você ainda pode comprar.</div>
       <div id="simBox"></div>
       <div id="formError" class="hidden sim-box sim-warn"></div>
@@ -877,6 +878,7 @@ function renderReservaForm(){
   document.getElementById('fNome').addEventListener('input', validateForm);
   document.getElementById('fMatricula').addEventListener('input', ()=>{ validateForm(); clearTimeout(saldoTimer); saldoTimer = setTimeout(verificarSaldo, 600); });
   document.getElementById('fSetor').addEventListener('input', validateForm);
+  document.getElementById('fEmail').addEventListener('input', validateForm);
   updateSimulation();
 
   const gateData = JSON.parse(sessionStorage.getItem('amvox_gate_data') || 'null');
@@ -889,7 +891,9 @@ function renderReservaForm(){
     document.getElementById('fNome').value = reservaDados.nome || document.getElementById('fNome').value;
     document.getElementById('fMatricula').value = reservaDados.matricula || document.getElementById('fMatricula').value;
     document.getElementById('fSetor').value = reservaDados.setor || document.getElementById('fSetor').value;
+    document.getElementById('fEmail').value = reservaDados.email || document.getElementById('fEmail').value;
   }
+  try{ if(!document.getElementById('fEmail').value) document.getElementById('fEmail').value = localStorage.getItem('amvox_email') || ''; }catch(e){}
   validateForm();
   verificarSaldo();
 }
@@ -903,7 +907,9 @@ function irParaPagamento(){
     nome: document.getElementById('fNome').value.trim(),
     matricula: document.getElementById('fMatricula').value.trim(),
     setor: document.getElementById('fSetor').value.trim(),
+    email: document.getElementById('fEmail').value.trim().toLowerCase(),
   };
+  try{ localStorage.setItem('amvox_email', reservaDados.email); }catch(e){}
   renderPagamento();
 }
 
@@ -1017,9 +1023,11 @@ function validateForm(){
   const nome = document.getElementById('fNome')?.value.trim();
   const matricula = document.getElementById('fMatricula')?.value.trim();
   const setor = document.getElementById('fSetor')?.value.trim();
+  const email = document.getElementById('fEmail')?.value.trim();
+  const emailOk = email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   const qtd = cart.reduce((a,c)=>a+c.quantidade,0);
   const temSaldo = saldoDisponivel !== null && saldoDisponivel > 0 && qtd <= saldoDisponivel;
-  const ok = nome && matricula && setor && currentPagamento && temSaldo;
+  const ok = nome && matricula && setor && emailOk && currentPagamento && temSaldo;
   btn.disabled = !ok;
 }
 
@@ -1030,9 +1038,9 @@ async function submitReserva(){
   btn.textContent = 'Enviando...';
   clearFormError();
 
-  const { nome, matricula, setor } = reservaDados || {};
+  const { nome, matricula, setor, email } = reservaDados || {};
   const payload = {
-    nome, matricula, setor,
+    nome, matricula, setor, email,
     pagamento: 'Pix',
     parcelas: null,
     itens: cart.map(c => ({ itemId: c.itemId, quantidade: c.quantidade }))
@@ -1287,6 +1295,8 @@ async function renderMeusChamados(){
           <button class="btn btn-outline btn-sm" onclick="document.getElementById('cmp-${c.protocolo}').click()">📎 ${c.temComprovante?'Trocar':'Anexar'} comprovante</button>
           <input type="file" id="cmp-${c.protocolo}" accept="image/*,application/pdf" style="display:none;" onchange="enviarComprovante('${c.protocolo}','${esc(c.matricula||'')}', this)">
         </div>` : ''}
+        ${c.status==='Concluído' && !c.entregueEm ? `<div style="margin-top:8px;padding:10px 12px;border-radius:8px;background:#E9F6EF;border:1px solid #1E7A4C;font-size:13px;font-weight:700;color:#1E7A4C;">📦 Produto LIBERADO para retirada${c.retiradaInfo ? `: <span style="text-transform:none;">${esc(c.retiradaInfo)}</span>` : ' — combine o horário com a TI'}<br><span style="font-weight:400;color:var(--ink-soft);">Local: sala do estoque de TI (próximo aos relógios de ponto). Apresente a Nota de Débito na portaria ao sair.</span></div>` : ''}
+        ${c.status==='Concluído' && c.entregueEm ? `<div style="margin-top:8px;font-size:12.5px;font-weight:600;color:#5B3FA0;">✅ Produto retirado em ${new Date(c.entregueEm).toLocaleString('pt-BR')}.</div>` : ''}
         ${c.status==='Concluído' && c.pagamento==='Pix' ? `<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
           <button class="btn btn-outline btn-sm" onclick="baixarNotaDebitoAssociado('${c.protocolo}','${esc(c.matricula||'')}', this)">Baixar Nota de Débito</button>
           <button class="btn btn-outline btn-sm" onclick="baixarResumoAssociado('${c.protocolo}')">Baixar resumo (imagem)</button>
@@ -1825,9 +1835,15 @@ async function dpDecide(protocolo, decisao){
   try{
     const obsEl = document.getElementById('obs-'+protocolo);
     const observacaoDP = obsEl && obsEl.value.trim() ? obsEl.value.trim() : undefined;
+    let retirada;
+    if(decisao === 'Concluído'){
+      retirada = prompt('Horário de retirada pra avisar o comprador (vai por e-mail e aparece em "Meus chamados"):', 'hoje às 16h');
+      if(retirada === null) return; // cancelou
+      retirada = retirada.trim();
+    }
     const res = await fetch('/api/reservas/' + encodeURIComponent(protocolo), {
       method: 'PATCH', headers: adminHeaders({'Content-Type':'application/json'}),
-      body: JSON.stringify({ status: decisao, observacaoDP })
+      body: JSON.stringify({ status: decisao, observacaoDP, retirada })
     });
     const data = await res.json();
     if(!res.ok) throw new Error(data.error || 'Falha ao atualizar o chamado.');

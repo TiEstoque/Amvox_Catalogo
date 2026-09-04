@@ -96,9 +96,13 @@ export default async function handler(req, res) {
     if (req.method === 'POST') {
       const body = parseBody(req);
       const { nome, matricula, setor, pagamento, itens } = body;
+      const email = String(body.email || '').trim().toLowerCase();
 
       if (!nome || !matricula || !setor || !pagamento || !Array.isArray(itens) || itens.length === 0) {
         return res.status(400).json({ error: 'Preencha nome, CPF, setor, forma de pagamento e selecione ao menos um item.' });
+      }
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return res.status(400).json({ error: 'Informe um e-mail válido — é por ele que avisamos quando o produto estiver liberado pra retirada.' });
       }
       // As compras agora são apenas via Pix (pagamento à vista)
       if (pagamento !== 'Pix') {
@@ -199,6 +203,7 @@ export default async function handler(req, res) {
           nome,
           matricula,
           setor,
+          email,
           valor_total: valorTotal,
           pagamento,
           parcelas: parcelasNum,
@@ -348,6 +353,8 @@ function shapeChamado(c, itens, descricaoPorItemId = {}) {
     temComprovante: !!c.comprovante_path,
     entregueEm: c.entregue_em || null,
     entregueObs: c.entregue_obs || null,
+    email: c.email || null,
+    retiradaInfo: c.retirada_info || null,
     dataAbertura: c.data_abertura,
     itens: itens.map((it) => ({
       itemId: it.item_id,
