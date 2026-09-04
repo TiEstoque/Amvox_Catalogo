@@ -22,14 +22,18 @@ export default async function handler(req, res) {
           erro: 'EMAIL_REMETENTE e/ou EMAIL_SENHA_APP não estão definidos nas variáveis do projeto amvox (ou o deploy não foi refeito depois de criá-las).',
         });
       }
+      const destino = String(req.query.para || '').trim().toLowerCase() || process.env.EMAIL_REMETENTE;
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(destino)) {
+        return res.status(400).json({ error: 'Destinatário inválido.' });
+      }
       try {
         await enviarEmail({
-          para: process.env.EMAIL_REMETENTE,
+          para: destino,
           assunto: 'Teste de envio — Catálogo Amvox',
           texto: 'Se você recebeu este e-mail, o envio automático do catálogo está funcionando. ✔',
           anexos: [],
         });
-        return res.status(200).json({ configurado: true, enviado: true, remetente: process.env.EMAIL_REMETENTE });
+        return res.status(200).json({ configurado: true, enviado: true, remetente: process.env.EMAIL_REMETENTE, destino });
       } catch (e) {
         return res.status(200).json({ configurado: true, enviado: false, erro: String((e && e.message) || e) });
       }

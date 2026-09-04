@@ -2010,13 +2010,15 @@ function renderManageList(){
 
 /* ============ TESTE DE E-MAIL (diagnóstico) ============ */
 async function testarEmail(btn){
+  const destino = prompt('Enviar o teste para qual e-mail?\n(deixe em branco pra mandar pro próprio remetente)', '');
+  if(destino === null) return;
   const original = btn.textContent;
   btn.disabled = true; btn.textContent = 'Testando...';
   try{
-    const res = await fetch('/api/baixas?testeEmail=1', { headers: adminHeaders() });
+    const res = await fetch('/api/baixas?testeEmail=1' + (destino.trim() ? '&para=' + encodeURIComponent(destino.trim()) : ''), { headers: adminHeaders() });
     const d = await res.json();
     if(d.enviado){
-      alert('✅ E-mail de teste ENVIADO com sucesso!\n\nRemetente: ' + d.remetente + '\nConfira a caixa de entrada dessa própria conta.');
+      alert('✅ E-mail de teste ENVIADO com sucesso!\n\nDe: ' + d.remetente + '\nPara: ' + d.destino + '\nConfira a caixa de entrada (e o spam).');
     } else if(d.configurado === false){
       alert('⚠️ Variáveis não configuradas no ambiente:\n\n' + d.erro);
     } else {
