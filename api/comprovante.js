@@ -74,12 +74,11 @@ export default async function handler(req, res) {
         .upload(path, buffer, { contentType, upsert: false });
       if (upErr) throw upErr;
 
-      // Comprovante anexado = venda confirmada. A trava do .eq('status', ...)
-      // garante que só um processo conclui (se o status mudou entre a leitura
-      // e o update — ex.: admin cancelando ao mesmo tempo — nada é concluído).
+      // Comprovante anexado -> chamado vai pra conferência da TI. A trava do
+      // .eq('status', ...) evita corrida (ex.: admin cancelando ao mesmo tempo).
       const { data: atualizados, error: updErr } = await supabase
         .from('chamados')
-        .update({ comprovante_path: path, status: 'Concluído' })
+        .update({ comprovante_path: path, status: 'Aguardando conferência da TI' })
         .eq('protocolo', protocolo)
         .eq('status', chamado.status)
         .select();
@@ -91,16 +90,7 @@ export default async function handler(req, res) {
         return res.status(200).json({ ok: true, status: chamado.status });
       }
 
-      const chamadoConcluido = atualizados[0];
-      const { data: itens, error: itensErr } = await supabase
-        .from('chamado_itens')
-        .select('*')
-        .eq('chamado_protocolo', protocolo);
-      if (itensErr) throw itensErr;
-
-      const notaDebitoNumero = await concluirChamado({ supabase, chamado: chamadoConcluido, itens });
-
-      return res.status(200).json({ ok: true, status: 'Concluído', notaDebitoNumero });
+      return res.status(200).json({ ok: true, status: 'Aguardando conferência da TI' });
     }
 
     if (req.method === 'GET') {

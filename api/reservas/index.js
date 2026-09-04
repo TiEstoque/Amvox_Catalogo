@@ -242,11 +242,10 @@ export default async function handler(req, res) {
         }
       }
 
-      // Comprovante veio junto -> confirma a compra na hora (vendido + ND +
-      // e-mail). Se algo falhar aqui, a reserva já existe com os itens
-      // segurados e o associado pode reanexar o comprovante em "Meus chamados".
+      // Comprovante veio junto -> chamado vai pra conferência da TI, com os
+      // itens segurados. A venda só conclui (vendido + ND + e-mail) quando o
+      // admin confere o comprovante e clica em "Concluir venda" no painel.
       let statusFinal = status;
-      let notaDebitoNumero = null;
       try {
         const ext =
           cmp.contentType === 'application/pdf'
@@ -258,29 +257,21 @@ export default async function handler(req, res) {
           .upload(cmpPath, cmpBuffer, { contentType: cmp.contentType, upsert: false });
         if (cmpUpErr) throw cmpUpErr;
 
-        const { data: atualizados, error: updErr } = await supabase
+        const { error: updErr } = await supabase
           .from('chamados')
-          .update({ comprovante_path: cmpPath, status: 'Concluído' })
-          .eq('protocolo', protocolo)
-          .select();
+          .update({ comprovante_path: cmpPath, status: 'Aguardando conferência da TI' })
+          .eq('protocolo', protocolo);
         if (updErr) throw updErr;
-
-        const { data: itensDb, error: itensDbErr } = await supabase
-          .from('chamado_itens')
-          .select('*')
-          .eq('chamado_protocolo', protocolo);
-        if (itensDbErr) throw itensDbErr;
-
-        notaDebitoNumero = await concluirChamado({ supabase, chamado: atualizados[0], itens: itensDb });
-        statusFinal = 'Concluído';
+        statusFinal = 'Aguardando conferência da TI';
       } catch (confErr) {
-        console.error('Reserva', protocolo, 'criada, mas a confirmação automática falhou:', confErr);
+        // reserva existe e itens estão segurados; o associado pode reanexar
+        // o comprovante em "Meus chamados"
+        console.error('Reserva', protocolo, 'criada, mas o envio do comprovante falhou:', confErr);
       }
 
       return res.status(200).json({
         protocolo,
         status: statusFinal,
-        notaDebitoNumero,
         valorTotal,
         nome,
         matricula,
@@ -333,6 +324,8 @@ function shapeChamado(c, itens, descricaoPorItemId = {}) {
     status: c.status,
     observacaoDP: c.observacao_dp,
     temComprovante: !!c.comprovante_path,
+    entregueEm: c.entregue_em || null,
+    entregueObs: c.entregue_obs || null,
     dataAbertura: c.data_abertura,
     itens: itens.map((it) => ({
       itemId: it.item_id,

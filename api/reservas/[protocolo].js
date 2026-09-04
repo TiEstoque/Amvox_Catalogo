@@ -52,6 +52,28 @@ export default async function handler(req, res) {
 
     if (!requireAdmin(req, res)) return;
 
+    // Marcar entrega física de um chamado concluído (aba "Itens vendidos")
+    if (body.entrega) {
+      const { data: chamadoEnt, error: entGetErr } = await supabase
+        .from('chamados')
+        .select('protocolo, status')
+        .eq('protocolo', protocolo)
+        .single();
+      if (entGetErr || !chamadoEnt) return res.status(404).json({ error: 'Chamado não encontrado.' });
+      if (chamadoEnt.status !== 'Concluído') {
+        return res.status(409).json({ error: 'Só é possível marcar entrega de chamado Concluído.' });
+      }
+      const { error: entErr } = await supabase
+        .from('chamados')
+        .update({
+          entregue_em: new Date().toISOString(),
+          entregue_obs: String(body.obs || '').trim() || null,
+        })
+        .eq('protocolo', protocolo);
+      if (entErr) throw entErr;
+      return res.status(200).json({ protocolo, entregue: true });
+    }
+
     if (!ALLOWED_STATUS.includes(status)) {
       return res.status(400).json({ error: 'Status inválido.' });
     }
