@@ -549,7 +549,7 @@ function setGateMode(mode){
 
 function concluirEntrada(dados){
   sessionStorage.setItem('amvox_gate_ok', '1');
-  sessionStorage.setItem('amvox_gate_data', JSON.stringify({ nome: dados.nome, cpf: dados.cpf, setor: dados.setor }));
+  sessionStorage.setItem('amvox_gate_data', JSON.stringify({ nome: dados.nome, cpf: dados.cpf, setor: dados.setor, email: dados.email || '' }));
   try{
     localStorage.setItem('amvox_gate_conhecido', '1');
     localStorage.setItem('amvox_gate_email', dados.email || '');
@@ -886,6 +886,7 @@ function renderReservaForm(){
     document.getElementById('fNome').value = gateData.nome || '';
     document.getElementById('fMatricula').value = gateData.cpf || '';
     document.getElementById('fSetor').value = gateData.setor || '';
+    document.getElementById('fEmail').value = gateData.email || '';
   }
   if(reservaDados){
     document.getElementById('fNome').value = reservaDados.nome || document.getElementById('fNome').value;
@@ -893,7 +894,11 @@ function renderReservaForm(){
     document.getElementById('fSetor').value = reservaDados.setor || document.getElementById('fSetor').value;
     document.getElementById('fEmail').value = reservaDados.email || document.getElementById('fEmail').value;
   }
-  try{ if(!document.getElementById('fEmail').value) document.getElementById('fEmail').value = localStorage.getItem('amvox_email') || ''; }catch(e){}
+  try{
+    if(!document.getElementById('fEmail').value){
+      document.getElementById('fEmail').value = localStorage.getItem('amvox_gate_email') || localStorage.getItem('amvox_email') || '';
+    }
+  }catch(e){}
   validateForm();
   verificarSaldo();
 }
