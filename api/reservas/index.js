@@ -276,7 +276,13 @@ export default async function handler(req, res) {
             pagamento: 'Pix',
             comprovante_path: cmpPath,
           },
-          itens: linhas.map((l) => ({ numero: l.item.numero, titulo: l.item.titulo, quantidade: l.qty })),
+          itens: linhas.map((l) => ({
+            item_id: l.item.id,
+            numero: l.item.numero,
+            titulo: l.item.titulo,
+            quantidade: l.qty,
+            is_stock: l.isStock,
+          })),
         });
       } catch (confErr) {
         // reserva existe e itens estão segurados; o associado pode reanexar

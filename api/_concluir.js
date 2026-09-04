@@ -27,13 +27,48 @@ export async function gerarNdEEmail({ supabase, chamado, itens }) {
   if (ndExistente) return ndExistente.numero;
 
   try {
+    // descrição e foto dos itens (pro corpo da ND e conferência visual)
+    const ids = [...new Set(itens.map((it) => it.item_id).filter(Boolean))];
+    const infoPorId = {};
+    if (ids.length) {
+      const { data: itemRows } = await supabase.from('items').select('id, descricao, foto_url').in('id', ids);
+      (itemRows || []).forEach((r) => { infoPorId[r.id] = r; });
+    }
+    const itensNd = itens.map((it) => {
+      const info = infoPorId[it.item_id] || {};
+      return {
+        numero: it.numero,
+        titulo: it.titulo,
+        quantidade: it.quantidade,
+        isStock: !!it.is_stock,
+        descricao: info.descricao && info.descricao !== '—' ? info.descricao : '',
+      };
+    });
+    const fotos = [];
+    for (const it of itens) {
+      if (fotos.length >= 2) break;
+      const url = infoPorId[it.item_id]?.foto_url;
+      if (!url || /\.webp(\?|$)/i.test(url)) continue;
+      try {
+        const resp = await fetch(url);
+        if (!resp.ok) continue;
+        fotos.push({
+          buffer: Buffer.from(await resp.arrayBuffer()),
+          extension: /\.png(\?|$)/i.test(url) ? 'png' : 'jpeg',
+        });
+      } catch (fotoErr) {
+        console.error('ND: falha ao baixar foto do item', it.item_id, fotoErr.message);
+      }
+    }
+
     const dataEmissao = new Date();
     const { numero, buffer } = await gerarNotaDebito({
       protocolo,
       pagador: chamado.nome,
       cpf: chamado.matricula,
       valorTotal: Number(chamado.valor_total),
-      itens: itens.map((it) => ({ numero: it.numero, titulo: it.titulo, quantidade: it.quantidade })),
+      itens: itensNd,
+      fotos,
       dataEmissao,
       getNumeroNd: async (ano) => {
         const { data: seqData, error: seqErr } = await supabase.rpc('proximo_numero_nd');

@@ -10,8 +10,13 @@ import { ND_TEMPLATE_BASE64 } from './_nd_template.js';
 
 // Modelo suporta até 2 itens na tabela (linhas 13 e 14). Com mais que isso,
 // concatena os demais na descrição do 2º item pra não perder informação.
+// Item de estoque (SSD, cooler etc.) não tem patrimônio: sai só o nome.
 function montarItens(itensChamado) {
-  const linhas = itensChamado.map((it) => `Nº ${it.numero} — ${it.titulo}${it.quantidade > 1 ? ` (${it.quantidade}x)` : ''}`);
+  const linhas = itensChamado.map((it) => {
+    const prefixo = it.isStock ? '' : `Nº ${it.numero} — `;
+    const desc = it.descricao ? ` — ${it.descricao}` : '';
+    return `${prefixo}${it.titulo}${desc}${it.quantidade > 1 ? ` (${it.quantidade}x)` : ''}`;
+  });
   if (linhas.length <= 2) return linhas;
   const primeiras = linhas.slice(0, 1);
   const resto = linhas.slice(1).join('; ');
@@ -26,7 +31,7 @@ export function formatarCpf(cpf) {
   return `${digitos.slice(0, 3)}.${digitos.slice(3, 6)}.${digitos.slice(6, 9)}-${digitos.slice(9)}`;
 }
 
-export async function gerarNotaDebito({ protocolo, pagador, cpf, valorTotal, itens, dataEmissao, getNumeroNd }) {
+export async function gerarNotaDebito({ protocolo, pagador, cpf, valorTotal, itens, dataEmissao, getNumeroNd, fotos = [] }) {
   const wb = new ExcelJS.Workbook();
   const buffer = Buffer.from(ND_TEMPLATE_BASE64, 'base64');
   await wb.xlsx.load(buffer);
@@ -66,6 +71,25 @@ export async function gerarNotaDebito({ protocolo, pagador, cpf, valorTotal, ite
     nd.getCell('A14').value = 2;
     nd.getCell('B14').value = linhasItens[1];
     // valor todo já foi lançado na linha 1 (C13) pra bater com o total do chamado
+  }
+
+  // descrições podem ser longas: quebra de linha + altura maior nas linhas de item
+  [13, 14].forEach((r) => {
+    const cell = nd.getCell(`B${r}`);
+    if (cell.value) {
+      cell.alignment = Object.assign({}, cell.alignment, { wrapText: true, vertical: 'middle' });
+      nd.getRow(r).height = Math.max(nd.getRow(r).height || 15, 42);
+    }
+  });
+
+  // foto(s) do(s) item(ns) abaixo das assinaturas, pra conferência visual
+  if (fotos && fotos.length) {
+    nd.getCell('A30').value = 'Foto do(s) item(ns):';
+    nd.getCell('A30').font = { bold: true };
+    fotos.slice(0, 2).forEach((f, idx) => {
+      const imgId = wb.addImage({ buffer: f.buffer, extension: f.extension });
+      nd.addImage(imgId, { tl: { col: idx * 2, row: 30 }, ext: { width: 190, height: 140 } });
+    });
   }
 
   // 4) CONTROLE — regista a nota emitida
