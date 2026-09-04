@@ -378,6 +378,9 @@
       <!-- Sub: Chamados -->
       <div id="admin-sub-chamados">
         <div class="dp-summary" id="dpSummary"></div>
+        <div style="margin:0 0 10px;">
+          <button class="btn btn-outline btn-sm" onclick="avisarFilaConferencia(this)">📣 Avisar fila de conferência (e-mail em lote)</button>
+        </div>
         <div class="chip-row" id="dpFilterChips" style="margin-bottom:16px;"></div>
         <div id="dpList"></div>
         <div class="empty hidden" id="dpEmpty"><div class="big">📭</div>Nenhum chamado nessa categoria.</div>
@@ -1834,6 +1837,27 @@ async function baixarNotaDebito(protocolo, btnEl){
   } finally {
     btnEl.textContent = original;
     btnEl.disabled = false;
+  }
+}
+
+async function avisarFilaConferencia(btn){
+  const msg = prompt('Quando os itens serão liberados?\n(vai por e-mail pra TODOS os chamados em conferência)', 'terça-feira às 16h');
+  if(msg === null || !msg.trim()) return;
+  const original = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Enviando...';
+  try{
+    const res = await fetch('/api/baixas', {
+      method: 'POST',
+      headers: Object.assign({'Content-Type':'application/json'}, adminHeaders()),
+      body: JSON.stringify({ avisarConferencia: true, mensagem: msg.trim() })
+    });
+    const d = await res.json();
+    if(!res.ok) throw new Error(d.error || 'Falha ao enviar os avisos.');
+    alert(`📣 Avisos enviados: ${d.enviados} de ${d.comEmail} com e-mail (fila total: ${d.total}).` + (d.erros && d.erros.length ? '\n\nErros:\n' + d.erros.join('\n') : ''));
+  }catch(err){
+    alert('Erro: ' + err.message);
+  }finally{
+    btn.disabled = false; btn.textContent = original;
   }
 }
 
