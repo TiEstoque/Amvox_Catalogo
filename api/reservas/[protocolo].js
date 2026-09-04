@@ -7,7 +7,7 @@ import { requireAdmin } from '../_admin.js';
 import { concluirChamado } from '../_concluir.js';
 import { enviarEmail, emailConfigurado } from '../_email.js';
 
-const ALLOWED_STATUS = ['Aprovado pelo DP', 'Reprovado pelo DP', 'Concluído', 'Cancelado'];
+const ALLOWED_STATUS = ['Aprovado pelo DP', 'Reprovado pelo DP', 'Aguardando conferência da TI', 'Concluído', 'Cancelado'];
 
 // E-mail avisando o comprador que o produto está liberado pra retirada.
 async function enviarAvisoRetirada(chamado, itens, retirada) {

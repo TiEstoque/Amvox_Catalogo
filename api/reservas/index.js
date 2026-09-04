@@ -265,10 +265,10 @@ export default async function handler(req, res) {
 
         const { error: updErr } = await supabase
           .from('chamados')
-          .update({ comprovante_path: cmpPath, status: 'Aguardando conferência da TI' })
+          .update({ comprovante_path: cmpPath, status: 'Em liberação do Fiscal' })
           .eq('protocolo', protocolo);
         if (updErr) throw updErr;
-        statusFinal = 'Aguardando conferência da TI';
+        statusFinal = 'Em liberação do Fiscal';
 
         notaDebitoNumero = await gerarNdEEmail({
           supabase,

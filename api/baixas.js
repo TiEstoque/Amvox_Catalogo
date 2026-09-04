@@ -53,8 +53,8 @@ export default async function handler(req, res) {
       const body = parseBody(req);
 
       // POST { avisarConferencia: true, mensagem } -> e-mail em lote pra
-      // todos os chamados em "Aguardando conferência da TI", informando
-      // quando os itens serão liberados.
+      // todos os chamados nas etapas de liberação (Fiscal + conferência da
+      // TI), informando quando os itens serão liberados.
       if (body.avisarConferencia) {
         const mensagem = String(body.mensagem || '').trim();
         if (!mensagem) return res.status(400).json({ error: 'Informe quando os itens serão liberados.' });
@@ -63,7 +63,7 @@ export default async function handler(req, res) {
         const { data: fila, error: filaErr } = await supabase
           .from('chamados')
           .select('*')
-          .eq('status', 'Aguardando conferência da TI');
+          .in('status', ['Em liberação do Fiscal', 'Aguardando conferência da TI']);
         if (filaErr) throw filaErr;
 
         const comEmail = (fila || []).filter((c) => c.email);
@@ -84,7 +84,7 @@ export default async function handler(req, res) {
               texto: [
                 `Olá, ${c.nome}!`,
                 ``,
-                `Recebemos o seu pagamento e sua compra está em conferência pela TI.`,
+                `Recebemos o seu pagamento e sua compra está nas etapas de liberação (Fiscal e conferência da TI).`,
                 `A liberação para retirada será: ${mensagem}.`,
                 `📍 Local: sala do estoque de TI (próximo aos relógios de ponto), com o TI Diego Barreto.`,
                 ``,

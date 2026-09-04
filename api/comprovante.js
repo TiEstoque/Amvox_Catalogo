@@ -78,7 +78,7 @@ export default async function handler(req, res) {
       // .eq('status', ...) evita corrida (ex.: admin cancelando ao mesmo tempo).
       const { data: atualizados, error: updErr } = await supabase
         .from('chamados')
-        .update({ comprovante_path: path, status: 'Aguardando conferência da TI' })
+        .update({ comprovante_path: path, status: 'Em liberação do Fiscal' })
         .eq('protocolo', protocolo)
         .eq('status', chamado.status)
         .select();
@@ -98,7 +98,7 @@ export default async function handler(req, res) {
       if (itensErr) throw itensErr;
       const notaDebitoNumero = await gerarNdEEmail({ supabase, chamado: atualizados[0], itens });
 
-      return res.status(200).json({ ok: true, status: 'Aguardando conferência da TI', notaDebitoNumero });
+      return res.status(200).json({ ok: true, status: 'Em liberação do Fiscal', notaDebitoNumero });
     }
 
     if (req.method === 'GET') {

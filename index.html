@@ -1109,7 +1109,7 @@ function renderConfirmation(c){
   modalContent.innerHTML = `
     <div class="modal-body" style="text-align:center;padding-top:30px;">
       <div class="confirm-icon">✓</div>
-      <h2>${c.status==='Concluído' ? 'Compra confirmada' : (c.status==='Aguardando conferência da TI' ? 'Comprovante em conferência' : 'Reserva confirmada')}</h2>
+      <h2>${c.status==='Concluído' ? 'Compra confirmada' : (c.status==='Em liberação do Fiscal' || c.status==='Aguardando conferência da TI' ? 'Pagamento recebido!' : 'Reserva confirmada')}</h2>
       <p style="color:var(--ink-soft);font-size:13.5px;">Guarde o protocolo para acompanhar em "Meus chamados".</p>
       <div class="protocol">${c.protocolo}</div>
       <div style="margin:14px 0;">${statusBadge(c.status)}</div>
@@ -1121,10 +1121,12 @@ function renderConfirmation(c){
           Sua Nota de Débito já está disponível.
         </div>
         <button class="btn btn-primary" onclick="baixarNotaDebitoAssociado('${c.protocolo}','${esc(c.matricula||'')}', this)">Baixar Nota de Débito</button>
-      </div>` : (c.status==='Aguardando conferência da TI' ? `<div style="margin-top:6px;">
+      </div>` : (c.status==='Em liberação do Fiscal' || c.status==='Aguardando conferência da TI' ? `<div style="margin-top:6px;">
         <div class="sim-box sim-ok" style="text-align:left;margin-bottom:10px;">
-          <b>Comprovante recebido!</b> Sua <b>Nota de Débito já está disponível</b> abaixo.
-          Seus itens estão reservados — a TI confere o pagamento e libera a entrega.
+          <b>Comprovante recebido!</b> Sua <b>Nota de Débito já está disponível</b> abaixo.<br>
+          <b>Próximo passo:</b> abra o chamado no Gestão (Faturamento → "Solicitar faturamento") anexando o
+          <b>Resumo</b>, o <b>comprovante do Pix</b> e a <b>Nota de Débito</b>. Após a liberação do Fiscal,
+          a TI confere e libera a retirada.
         </div>
         <button class="btn btn-primary" onclick="baixarNotaDebitoAssociado('${c.protocolo}','${esc(c.matricula||'')}', this)">Baixar Nota de Débito</button>
       </div>` : (c.pagamento==='Pix' ? `<div style="margin-top:6px;">
@@ -1232,6 +1234,7 @@ async function baixarResumoAdmin(protocolo){
 function statusBadge(status){
   const map = {
     'Aguardando pagamento Pix': ['badge-pix','Aguardando pagamento Pix'],
+    'Em liberação do Fiscal': ['badge-pix','Em liberação (Fiscal)'],
     'Aguardando conferência da TI': ['badge-dp','Em conferência (TI)'],
     'Pix informado': ['badge-dp','Pix informado'],
     'Aprovado automaticamente': ['badge-ok','Aprovado'],
@@ -1292,7 +1295,13 @@ async function renderMeusChamados(){
           <button class="btn btn-primary btn-sm" onclick="document.getElementById('cmp-${c.protocolo}').click()">📎 Anexar comprovante do Pix</button>
           <input type="file" id="cmp-${c.protocolo}" accept="image/*,application/pdf" style="display:none;" onchange="enviarComprovante('${c.protocolo}','${esc(c.matricula||'')}', this)">
         </div>` : ''}
-        ${c.status==='Aguardando conferência da TI' ? `<div style="margin-top:8px;font-size:12.5px;font-weight:600;color:var(--ink-soft);">💳 Comprovante recebido — a TI está conferindo o pagamento para liberar a entrega.</div>
+        ${c.status==='Em liberação do Fiscal' ? `<div style="margin-top:8px;font-size:12.5px;font-weight:600;color:var(--ink-soft);">🧾 Pagamento recebido — em liberação pelo setor Fiscal. Se ainda não abriu, abra o chamado no Gestão (Faturamento) com o Resumo, o comprovante e a Nota de Débito anexados.</div>
+        <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn btn-outline btn-sm" onclick="baixarNotaDebitoAssociado('${c.protocolo}','${esc(c.matricula||'')}', this)">Baixar Nota de Débito</button>
+          <button class="btn btn-outline btn-sm" onclick="baixarResumoAssociado('${c.protocolo}')">Baixar resumo (imagem)</button>
+          ${c.temComprovante ? `<button class="btn btn-outline btn-sm" onclick="verComprovante('${c.protocolo}','${esc(c.matricula||'')}')">Ver comprovante</button>` : ''}
+        </div>` : ''}
+        ${c.status==='Aguardando conferência da TI' ? `<div style="margin-top:8px;font-size:12.5px;font-weight:600;color:var(--ink-soft);">💳 Liberado pelo Fiscal — a TI está conferindo pra liberar a retirada.</div>
         <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">
           <button class="btn btn-outline btn-sm" onclick="baixarNotaDebitoAssociado('${c.protocolo}','${esc(c.matricula||'')}', this)">Baixar Nota de Débito</button>
           <button class="btn btn-outline btn-sm" onclick="baixarResumoAssociado('${c.protocolo}')">Baixar resumo (imagem)</button>
@@ -1725,7 +1734,7 @@ async function refreshAdmin(){
   renderManageList();
 }
 
-let dpFilter = 'Aguardando conferência da TI';
+let dpFilter = 'Em liberação do Fiscal';
 let adminChamadosList = [];
 async function renderDP(){
   let list;
@@ -1743,6 +1752,7 @@ async function renderDP(){
   const active = c => !['Reprovado pelo DP','Cancelado','Concluído'].includes(c.status);
   const counts = {
     'Todos': list.length,
+    'Em liberação do Fiscal': list.filter(c=>c.status==='Em liberação do Fiscal').length,
     'Aguardando conferência da TI': list.filter(c=>c.status==='Aguardando conferência da TI').length,
     'Aguardando avaliação do DP': list.filter(c=>c.status==='Aguardando avaliação do DP').length,
     'Pix informado': list.filter(c=>c.status==='Pix informado').length,
@@ -1752,13 +1762,13 @@ async function renderDP(){
   };
   document.getElementById('dpSummary').innerHTML = `
     <div class="dp-stat"><div class="n">${counts['Todos']}</div><div class="l">Total de chamados</div></div>
+    <div class="dp-stat"><div class="n" style="color:var(--accent);">${counts['Em liberação do Fiscal']}</div><div class="l">Em liberação (Fiscal)</div></div>
     <div class="dp-stat"><div class="n" style="color:var(--warning);">${counts['Aguardando conferência da TI']}</div><div class="l">Em conferência (TI)</div></div>
-    <div class="dp-stat"><div class="n" style="color:var(--accent);">${counts['Pix informado']}</div><div class="l">Pix informado</div></div>
     <div class="dp-stat"><div class="n" style="color:var(--primary);">${counts['Reservado (ativo)']}</div><div class="l">Reservas ativas</div></div>
     <div class="dp-stat"><div class="n" style="color:#5B3FA0;">${counts['Concluído']}</div><div class="l">Concluídos</div></div>
     <div class="dp-stat"><div class="n" style="color:var(--danger);">${counts['Cancelado / Reprovado']}</div><div class="l">Cancelados / Reprovados</div></div>
   `;
-  const chips = ['Aguardando conferência da TI','Reservado (ativo)','Todos','Concluído','Cancelado / Reprovado'];
+  const chips = ['Em liberação do Fiscal','Aguardando conferência da TI','Reservado (ativo)','Todos','Concluído','Cancelado / Reprovado'];
   document.getElementById('dpFilterChips').innerHTML = chips.map(c=>`<button class="chip ${c===dpFilter?'active':''}" data-f="${esc(c)}">${esc(c)} (${counts[c]})</button>`).join('');
   document.querySelectorAll('#dpFilterChips .chip').forEach(ch=>{ ch.addEventListener('click', ()=>{ dpFilter = ch.dataset.f; renderDP(); }); });
 
@@ -1789,6 +1799,11 @@ async function renderDP(){
         <div class="dp-actions">
           <button class="btn btn-success btn-sm" onclick="dpDecide('${c.protocolo}','Aprovado pelo DP')">Aprovar</button>
           <button class="btn btn-danger-outline btn-sm" onclick="dpDecide('${c.protocolo}','Reprovado pelo DP')">Reprovar</button>
+        </div>`;
+    } else if(c.status==='Em liberação do Fiscal'){
+      actions = `<div class="dp-actions">
+          <button class="btn btn-primary btn-sm" onclick="dpDecide('${c.protocolo}','Aguardando conferência da TI')">→ Enviar pra conferência da TI</button>
+          <button class="btn btn-danger-outline btn-sm" onclick="dpDecide('${c.protocolo}','Cancelado')">Cancelar reserva</button>
         </div>`;
     } else if(active(c)){
       actions = `<div class="dp-actions">
