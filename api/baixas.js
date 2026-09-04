@@ -6,11 +6,34 @@
 
 import { getSupabase } from './_supabase.js';
 import { requireAdmin } from './_admin.js';
+import { enviarEmail, emailConfigurado } from './_email.js';
 
 export default async function handler(req, res) {
   try {
     if (!requireAdmin(req, res)) return;
     const supabase = getSupabase();
+
+    // GET /api/baixas?testeEmail=1 -> diagnóstico do envio de e-mail (admin):
+    // manda um teste pro próprio remetente e devolve o erro exato se falhar.
+    if (req.method === 'GET' && req.query.testeEmail) {
+      if (!emailConfigurado()) {
+        return res.status(200).json({
+          configurado: false,
+          erro: 'EMAIL_REMETENTE e/ou EMAIL_SENHA_APP não estão definidos nas variáveis do projeto amvox (ou o deploy não foi refeito depois de criá-las).',
+        });
+      }
+      try {
+        await enviarEmail({
+          para: process.env.EMAIL_REMETENTE,
+          assunto: 'Teste de envio — Catálogo Amvox',
+          texto: 'Se você recebeu este e-mail, o envio automático do catálogo está funcionando. ✔',
+          anexos: [],
+        });
+        return res.status(200).json({ configurado: true, enviado: true, remetente: process.env.EMAIL_REMETENTE });
+      } catch (e) {
+        return res.status(200).json({ configurado: true, enviado: false, erro: String((e && e.message) || e) });
+      }
+    }
 
     if (req.method === 'GET') {
       const { data, error } = await supabase

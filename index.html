@@ -431,6 +431,7 @@
         <div class="panel-head">
           <div><h2 style="font-size:17px;margin:0;">Itens no catálogo</h2></div>
           <div style="display:flex;gap:10px;align-items:center;">
+            <button class="btn btn-outline btn-sm" onclick="testarEmail(this)">✉️ Testar e-mail</button>
             <button class="btn btn-outline btn-sm" onclick="toggleHistoricoBaixas()">🧾 Histórico de baixas</button>
             <div class="search-box" style="max-width:280px;"><input type="text" id="manageSearch" placeholder="Buscar item..."></div>
           </div>
@@ -2005,6 +2006,27 @@ function renderManageList(){
       <div class="edit-box hidden" id="edit-${i.id}"></div>
     </div>`;
   }).join('') || '<p style="color:var(--ink-soft);">Nenhum item encontrado.</p>';
+}
+
+/* ============ TESTE DE E-MAIL (diagnóstico) ============ */
+async function testarEmail(btn){
+  const original = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Testando...';
+  try{
+    const res = await fetch('/api/baixas?testeEmail=1', { headers: adminHeaders() });
+    const d = await res.json();
+    if(d.enviado){
+      alert('✅ E-mail de teste ENVIADO com sucesso!\n\nRemetente: ' + d.remetente + '\nConfira a caixa de entrada dessa própria conta.');
+    } else if(d.configurado === false){
+      alert('⚠️ Variáveis não configuradas no ambiente:\n\n' + d.erro);
+    } else {
+      alert('❌ Envio FALHOU. Erro exato:\n\n' + (d.erro || 'desconhecido'));
+    }
+  }catch(err){
+    alert('Erro ao chamar o teste: ' + err.message);
+  }finally{
+    btn.disabled = false; btn.textContent = original;
+  }
 }
 
 /* ============ BAIXA DE USO INTERNO ============ */
