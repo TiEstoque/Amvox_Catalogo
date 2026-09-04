@@ -10,7 +10,7 @@
 
 import { getSupabase } from './_supabase.js';
 import { verifyToken } from './_admin.js';
-import { concluirChamado } from './_concluir.js';
+import { gerarNdEEmail } from './_concluir.js';
 
 export const config = {
   api: {
@@ -90,7 +90,15 @@ export default async function handler(req, res) {
         return res.status(200).json({ ok: true, status: chamado.status });
       }
 
-      return res.status(200).json({ ok: true, status: 'Aguardando conferência da TI' });
+      // gera a ND + e-mail já na hora do comprovante (idempotente)
+      const { data: itens, error: itensErr } = await supabase
+        .from('chamado_itens')
+        .select('*')
+        .eq('chamado_protocolo', protocolo);
+      if (itensErr) throw itensErr;
+      const notaDebitoNumero = await gerarNdEEmail({ supabase, chamado: atualizados[0], itens });
+
+      return res.status(200).json({ ok: true, status: 'Aguardando conferência da TI', notaDebitoNumero });
     }
 
     if (req.method === 'GET') {

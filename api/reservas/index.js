@@ -8,7 +8,7 @@
 
 import { getSupabase } from '../_supabase.js';
 import { requireAdmin } from '../_admin.js';
-import { concluirChamado } from '../_concluir.js';
+import { gerarNdEEmail } from '../_concluir.js';
 
 export const config = {
   api: {
@@ -242,10 +242,11 @@ export default async function handler(req, res) {
         }
       }
 
-      // Comprovante veio junto -> chamado vai pra conferência da TI, com os
-      // itens segurados. A venda só conclui (vendido + ND + e-mail) quando o
-      // admin confere o comprovante e clica em "Concluir venda" no painel.
+      // Comprovante veio junto -> gera a ND + e-mail na hora e o chamado vai
+      // pra conferência da TI (itens segurados). O admin confere e clica em
+      // "Concluir venda" só pra finalizar (marcar vendido) e liberar a entrega.
       let statusFinal = status;
+      let notaDebitoNumero = null;
       try {
         const ext =
           cmp.contentType === 'application/pdf'
@@ -263,6 +264,20 @@ export default async function handler(req, res) {
           .eq('protocolo', protocolo);
         if (updErr) throw updErr;
         statusFinal = 'Aguardando conferência da TI';
+
+        notaDebitoNumero = await gerarNdEEmail({
+          supabase,
+          chamado: {
+            protocolo,
+            nome,
+            matricula,
+            setor,
+            valor_total: valorTotal,
+            pagamento: 'Pix',
+            comprovante_path: cmpPath,
+          },
+          itens: linhas.map((l) => ({ numero: l.item.numero, titulo: l.item.titulo, quantidade: l.qty })),
+        });
       } catch (confErr) {
         // reserva existe e itens estão segurados; o associado pode reanexar
         // o comprovante em "Meus chamados"
@@ -272,6 +287,7 @@ export default async function handler(req, res) {
       return res.status(200).json({
         protocolo,
         status: statusFinal,
+        notaDebitoNumero,
         valorTotal,
         nome,
         matricula,
