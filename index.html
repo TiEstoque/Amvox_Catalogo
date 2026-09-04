@@ -786,7 +786,7 @@ function renderCartBar(){
 
 function renderGrid(){
   let items = effectiveCatalog.filter(i=>{
-    if(!i.isStock && i.itemStatus==='Vendido') return false; // concluídos só aparecem na gestão do catálogo (admin)
+    if(!i.isStock && (i.itemStatus==='Vendido' || i.itemStatus==='Reservado')) return false; // vendidos e reservados (já pagos) somem do catálogo — só o admin vê na gestão
     const matchCat = activeCat==='Todos' || i.categoria===activeCat;
     const hay = (String(i.numero)+' '+i.titulo+' '+i.descricao).toLowerCase();
     const matchSearch = !searchTerm || hay.includes(searchTerm);
