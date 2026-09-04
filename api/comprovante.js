@@ -10,7 +10,7 @@
 
 import { getSupabase } from './_supabase.js';
 import { verifyToken } from './_admin.js';
-import { gerarNdEEmail } from './_concluir.js';
+import { gerarNdEEmail, enviarAvisoFiscal } from './_concluir.js';
 
 export const config = {
   api: {
@@ -97,6 +97,7 @@ export default async function handler(req, res) {
         .eq('chamado_protocolo', protocolo);
       if (itensErr) throw itensErr;
       const notaDebitoNumero = await gerarNdEEmail({ supabase, chamado: atualizados[0], itens });
+      await enviarAvisoFiscal({ chamado: atualizados[0], itens });
 
       return res.status(200).json({ ok: true, status: 'Em liberação do Fiscal', notaDebitoNumero });
     }

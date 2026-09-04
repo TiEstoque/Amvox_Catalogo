@@ -8,7 +8,7 @@
 
 import { getSupabase } from '../_supabase.js';
 import { requireAdmin } from '../_admin.js';
-import { gerarNdEEmail } from '../_concluir.js';
+import { gerarNdEEmail, enviarAvisoFiscal } from '../_concluir.js';
 
 export const config = {
   api: {
@@ -270,25 +270,25 @@ export default async function handler(req, res) {
         if (updErr) throw updErr;
         statusFinal = 'Em liberação do Fiscal';
 
-        notaDebitoNumero = await gerarNdEEmail({
-          supabase,
-          chamado: {
-            protocolo,
-            nome,
-            matricula,
-            setor,
-            valor_total: valorTotal,
-            pagamento: 'Pix',
-            comprovante_path: cmpPath,
-          },
-          itens: linhas.map((l) => ({
-            item_id: l.item.id,
-            numero: l.item.numero,
-            titulo: l.item.titulo,
-            quantidade: l.qty,
-            is_stock: l.isStock,
-          })),
-        });
+        const chamadoNd = {
+          protocolo,
+          nome,
+          matricula,
+          setor,
+          email,
+          valor_total: valorTotal,
+          pagamento: 'Pix',
+          comprovante_path: cmpPath,
+        };
+        const itensNd = linhas.map((l) => ({
+          item_id: l.item.id,
+          numero: l.item.numero,
+          titulo: l.item.titulo,
+          quantidade: l.qty,
+          is_stock: l.isStock,
+        }));
+        notaDebitoNumero = await gerarNdEEmail({ supabase, chamado: chamadoNd, itens: itensNd });
+        await enviarAvisoFiscal({ chamado: chamadoNd, itens: itensNd });
       } catch (confErr) {
         // reserva existe e itens estão segurados; o associado pode reanexar
         // o comprovante em "Meus chamados"

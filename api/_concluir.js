@@ -154,6 +154,47 @@ export async function gerarNdEEmail({ supabase, chamado, itens }) {
   }
 }
 
+// Aviso automático ao comprador assim que o pagamento entra: compra em
+// liberação do Fiscal + instruções do chamado no Gestão. Nunca lança erro.
+export async function enviarAvisoFiscal({ chamado, itens }) {
+  if (!chamado.email || !emailConfigurado()) return false;
+  try {
+    const itensTxt = itens
+      .map((it) => `  - ${it.is_stock ? '' : `Nº ${it.numero} — `}${it.titulo}${it.quantidade > 1 ? ` (${it.quantidade}x)` : ''}`)
+      .join('\n');
+    await enviarEmail({
+      para: chamado.email,
+      assunto: `🧾 Pagamento recebido — próximo passo: chamado no Gestão (${chamado.protocolo})`,
+      texto: [
+        `Olá, ${chamado.nome}!`,
+        ``,
+        `Recebemos o seu pagamento — sua compra está EM LIBERAÇÃO DO SETOR FISCAL.`,
+        ``,
+        `PRÓXIMO PASSO (importante): abra um chamado no Gestão (gestao.amvoxtech.com.br)`,
+        `para o Faturamento, categoria "Solicitar faturamento", descrição "Segue compra de itens",`,
+        `informando seu nome completo e setor, com analistati1@amvox.com.br em cópia (CC),`,
+        `e anexe os 3 arquivos:`,
+        `  1) Resumo (imagem)   2) Comprovante do Pix   3) Nota de Débito`,
+        `(Baixe o Resumo e a Nota de Débito em "Meus chamados" no catálogo: amvox.vercel.app)`,
+        ``,
+        `O Faturamento tem até 72 horas para a liberação. Depois disso a TI confere e você`,
+        `recebe um novo e-mail com o horário de retirada.`,
+        ``,
+        `Compra ${chamado.protocolo}:`,
+        itensTxt,
+        `Valor: R$ ${Number(chamado.valor_total).toFixed(2).replace('.', ',')}`,
+        ``,
+        `TI Amvox`,
+      ].join('\n'),
+      anexos: [],
+    });
+    return true;
+  } catch (e) {
+    console.error('Erro ao enviar aviso de liberação do Fiscal', chamado.protocolo, e);
+    return false;
+  }
+}
+
 export async function concluirChamado({ supabase, chamado, itens }) {
   // marca como vendido definitivamente
   for (const it of itens) {
