@@ -94,24 +94,6 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'POST') {
-      // Janela de compras: das 07:00 às 18:00 (horário da Bahia). Tolerância
-      // de 20 min no fim — quem entrou 17:59 tem o cronômetro do Pix pra concluir.
-      const [hBahia, mBahia] = new Intl.DateTimeFormat('en-US', {
-        timeZone: 'America/Bahia',
-        hour: 'numeric',
-        minute: 'numeric',
-        hourCycle: 'h23',
-      })
-        .format(new Date())
-        .split(':')
-        .map(Number);
-      const minutosBahia = hBahia * 60 + mBahia;
-      if (minutosBahia < 7 * 60 || minutosBahia >= 18 * 60 + 20) {
-        return res.status(403).json({
-          error: 'As compras funcionam das 07:00 às 18:00. Volte dentro desse horário para fazer a sua reserva. 😉',
-        });
-      }
-
       const body = parseBody(req);
       const { nome, matricula, setor, pagamento, itens } = body;
       const email = String(body.email || '').trim().toLowerCase();
