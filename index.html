@@ -336,6 +336,7 @@
       <div class="search-box"><input type="text" id="searchInput" placeholder="Buscar por número, modelo ou descrição..."></div>
       <div class="chip-row" id="catChips"></div>
       <div class="chip-row hidden" id="sizeChips" style="width:100%;align-items:center;"></div>
+      <div class="chip-row hidden" id="cpuChips" style="width:100%;align-items:center;"></div>
     </div>
 
     <div class="grid" id="grid"></div>
@@ -760,7 +761,7 @@ function prefillMeusChamados(){
 }
 
 /* ============ CATALOGO / CART ============ */
-let activeCat = 'Todos', searchTerm = '', activeSize = 'Todos';
+let activeCat = 'Todos', searchTerm = '', activeSize = 'Todos', activeCpu = 'Todos';
 
 // Extrai o tamanho da tela (ex.: 18,5 / 21 / 21,5 / 24) da descrição de um
 // monitor, ignorando códigos de modelo (2270SWHEN, 22B30HM2 etc.).
@@ -772,6 +773,38 @@ function tamanhoMonitor(i){
   return m[1] + (m[2] ? ',5' : '');
 }
 
+// Família do processador de um computador (i3 / i5 / i7 / i9 / Ryzen 5...),
+// lida do título ou da descrição. Usada no filtro "Processador" da categoria
+// Computadores.
+const ORDEM_CPU = ['i3','i5','i7','i9','Ryzen 3','Ryzen 5','Ryzen 7','Ryzen 9','Outros'];
+function processadorPc(i){
+  if(String(i.categoria || '') !== 'Computadores') return null;
+  const txt = `${i.titulo || ''} ${i.descricao || ''}`;
+  let m = txt.match(/\bi\s?([3579])\b/i);
+  if(m) return 'i' + m[1];
+  m = txt.match(/ryzen\s*([3579])\b/i);
+  if(m) return 'Ryzen ' + m[1];
+  return 'Outros';
+}
+
+function buildCpuChips(){
+  const wrap = document.getElementById('cpuChips');
+  if(!wrap) return;
+  if(activeCat !== 'Computadores'){ activeCpu = 'Todos'; wrap.classList.add('hidden'); return; }
+  const familias = [...new Set(effectiveCatalog
+    .filter(i => i.categoria === 'Computadores' && (i.isStock ? i.availableQty > 0 : i.disponivel))
+    .map(processadorPc).filter(Boolean))]
+    .sort((a,b) => ORDEM_CPU.indexOf(a) - ORDEM_CPU.indexOf(b));
+  if(familias.length < 2){ activeCpu = 'Todos'; wrap.classList.add('hidden'); return; }
+  wrap.classList.remove('hidden');
+  const all = ['Todos', ...familias];
+  wrap.innerHTML = `<span style="font-size:12.5px;font-weight:700;color:var(--ink-soft);margin-right:2px;">🖥️ Processador:</span>` +
+    all.map(f=>`<button class="chip ${f===activeCpu?'active':''}" data-cpu="${esc(f)}">${esc(f)}</button>`).join('');
+  wrap.querySelectorAll('.chip').forEach(ch=>{
+    ch.addEventListener('click', ()=>{ activeCpu = ch.dataset.cpu; buildCpuChips(); renderGrid(); });
+  });
+}
+
 function buildChips(){
   const cats = [...new Set(effectiveCatalog.map(i=>i.categoria))];
   const all = ['Todos', ...cats];
@@ -781,11 +814,13 @@ function buildChips(){
     ch.addEventListener('click', ()=>{ activeCat = ch.dataset.cat; buildChips(); renderGrid(); });
   });
   buildSizeChips();
+  buildCpuChips();
 }
 
 function buildSizeChips(){
   const wrap = document.getElementById('sizeChips');
   if(!wrap) return;
+  if(activeCat !== 'Todos' && activeCat !== 'Monitores'){ activeSize = 'Todos'; wrap.classList.add('hidden'); return; }
   const tamanhos = [...new Set(effectiveCatalog.map(tamanhoMonitor).filter(Boolean))]
     .sort((a,b)=>parseFloat(a.replace(',','.')) - parseFloat(b.replace(',','.')));
   if(!tamanhos.length){ wrap.classList.add('hidden'); return; }
@@ -854,7 +889,8 @@ function renderGrid(){
     const hay = (String(i.numero)+' '+i.titulo+' '+i.descricao).toLowerCase();
     const matchSearch = !searchTerm || hay.includes(searchTerm);
     const matchSize = activeSize==='Todos' || tamanhoMonitor(i)===activeSize;
-    return matchCat && matchSearch && matchSize;
+    const matchCpu = activeCat!=='Computadores' || activeCpu==='Todos' || processadorPc(i)===activeCpu;
+    return matchCat && matchSearch && matchSize && matchCpu;
   });
   document.getElementById('resultCount').textContent = items.length + (items.length===1 ? ' item no catálogo' : ' itens no catálogo');
   const grid = document.getElementById('grid');
