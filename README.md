@@ -121,7 +121,9 @@ Pra atualizar a lista quando o RH mandar uma relação nova: copie a coluna de
 CPFs (pode ir com o nome junto, "CPF;Nome") e cole no card **Colaboradores
 autorizados**, origem "Relação do RH". CPFs repetidos só são atualizados.
 "Ver lista completa" abre a lista com busca, e cada CPF pode ser desativado
-(não se cadastra mais) ou removido. Rota: `api/autorizados.js` (admin).
+(não se cadastra mais) ou removido. Rota: `/api/usuarios?recurso=autorizados`
+(admin; código em `api/_autorizados.js` — o plano Hobby da Vercel limita a 12
+funções por deploy e o projeto já usa as 12).
 
 ## Promoção por e-mail (Painel Administrativo → aba Promoção)
 

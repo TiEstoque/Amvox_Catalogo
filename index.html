@@ -2445,7 +2445,7 @@ function desenharUsuarios(){
 let autorizadosCache = null;
 
 async function carregarAutorizados(){
-  const res = await fetch('/api/autorizados', { headers: adminHeaders() });
+  const res = await fetch('/api/usuarios?recurso=autorizados', { headers: adminHeaders() });
   const d = await res.json();
   if(!res.ok) throw new Error(d.error || 'Falha ao carregar a lista de autorizados.');
   autorizadosCache = d;
@@ -2466,7 +2466,7 @@ async function adicionarAutorizados(){
   if(!texto){ showToast('Cole pelo menos um CPF.'); return; }
   btn.disabled = true; msg.textContent = 'Enviando...';
   try{
-    const res = await fetch('/api/autorizados', {
+    const res = await fetch('/api/usuarios?recurso=autorizados', {
       method:'POST', headers: adminHeaders({'Content-Type':'application/json'}),
       body: JSON.stringify({ texto, origem, observacao })
     });
@@ -2513,7 +2513,7 @@ function abrirListaAutorizados(){
 
 async function alternarAutorizado(cpf, ativo){
   try{
-    const res = await fetch('/api/autorizados', {
+    const res = await fetch('/api/usuarios?recurso=autorizados', {
       method:'PATCH', headers: adminHeaders({'Content-Type':'application/json'}), body: JSON.stringify({ cpf, ativo })
     });
     const d = await res.json();
@@ -2525,7 +2525,7 @@ async function alternarAutorizado(cpf, ativo){
 async function removerAutorizado(cpf, nome){
   if(!confirm(`Remover ${nome} da lista de autorizados?\nSe já tiver cadastro, continua entrando — pra tirar o acesso use "Bloquear" na lista de usuários.`)) return;
   try{
-    const res = await fetch('/api/autorizados?cpf=' + encodeURIComponent(cpf), { method:'DELETE', headers: adminHeaders() });
+    const res = await fetch('/api/usuarios?recurso=autorizados&cpf=' + encodeURIComponent(cpf), { method:'DELETE', headers: adminHeaders() });
     const d = await res.json();
     if(!res.ok) throw new Error(d.error || 'Falha ao remover.');
     await carregarAutorizados(); abrirListaAutorizados(); renderUsuarios();

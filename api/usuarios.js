@@ -1,13 +1,15 @@
 // api/usuarios.js
 // Gestão dos usuários cadastrados (Painel Administrativo — exige login de admin).
 // GET    /api/usuarios              -> lista os cadastros (com autorizado = CPF está na lista de colaboradores)
+// ...    /api/usuarios?recurso=autorizados -> gestão da lista de CPFs autorizados (GET lista, POST cola CPFs,
+//                                             PATCH {cpf, ativo}, DELETE &cpf=...) — código em _autorizados.js
 // PATCH  /api/usuarios              -> { cpf, acao: 'senha'|'bloquear'|'desbloquear', novaSenha? }
 // DELETE /api/usuarios?cpf=...      -> exclui o cadastro
 
 import crypto from 'crypto';
 import { getSupabase } from './_supabase.js';
 import { requireAdmin } from './_admin.js';
-import { cpfsAutorizados } from './_autorizados.js';
+import { cpfsAutorizados, handleAutorizados } from './_autorizados.js';
 
 function hashPassword(password) {
   const salt = crypto.randomBytes(16).toString('hex');
@@ -20,6 +22,11 @@ export default async function handler(req, res) {
     if (!requireAdmin(req, res)) return;
 
     const supabase = getSupabase();
+
+    // Lista de colaboradores autorizados (GET/POST/PATCH/DELETE) — ver _autorizados.js
+    if (String(req.query.recurso || '') === 'autorizados') {
+      return handleAutorizados(req, res, supabase);
+    }
 
     if (req.method === 'GET') {
       const [{ data: usuarios, error }, autorizados] = await Promise.all([
