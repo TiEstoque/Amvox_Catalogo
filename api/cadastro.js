@@ -127,7 +127,23 @@ module.exports = async (req, res) => {
         .eq('cpf', cpfLimpo);
       if (error) throw error;
     } else {
-      // primeiro acesso desse CPF -> cria a senha
+      // primeiro acesso desse CPF -> só se o CPF estiver na lista de
+      // colaboradores autorizados (relação do RH + exceções liberadas pela TI)
+      const { data: autorizado, error: autErr } = await supabase
+        .from('colaboradores_autorizados')
+        .select('cpf')
+        .eq('cpf', cpfLimpo)
+        .eq('ativo', true)
+        .maybeSingle();
+      if (autErr) throw autErr;
+      if (!autorizado) {
+        res.status(403).json({
+          error: 'Esse CPF não está na relação de colaboradores da Amvox. Se você é funcionário(a), procure a TI para liberar o seu cadastro.',
+        });
+        return;
+      }
+
+      // cria a senha
       const { error } = await supabase.from('cadastros_acesso').insert({
         nome: String(nome).trim(),
         email: String(email).trim().toLowerCase(),

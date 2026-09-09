@@ -4,7 +4,8 @@
 //
 // GET  /api/promocao
 //      -> { total, destinatarios: [e-mails], emailConfigurado, remetente }
-//         (cadastros não bloqueados, sem e-mail repetido)
+//         (cadastros não bloqueados e com CPF na lista de colaboradores
+//          autorizados, sem e-mail repetido)
 //
 // POST /api/promocao { assunto, mensagem, teste: 'email' }
 //      -> envia SÓ um teste pro e-mail informado (vazio = remetente do catálogo)
@@ -22,6 +23,7 @@
 import { getSupabase } from './_supabase.js';
 import { requireAdmin } from './_admin.js';
 import { enviarEmail, emailConfigurado } from './_email.js';
+import { cpfsAutorizados } from './_autorizados.js';
 
 const LOTE_MAX = 20;      // destinatários por chamada
 const PARALELOS = 5;      // envios simultâneos (Gmail não gosta de muitos de uma vez)
@@ -114,16 +116,21 @@ export default async function handler(req, res) {
   }
 }
 
-// Cadastros não bloqueados, e-mails em minúsculas e sem repetição.
+// Cadastros não bloqueados E com CPF na lista de colaboradores autorizados;
+// e-mails em minúsculas e sem repetição.
 async function listarDestinatarios(supabase) {
-  const { data, error } = await supabase
-    .from('cadastros_acesso')
-    .select('email')
-    .eq('bloqueado', false)
-    .order('email', { ascending: true });
+  const [{ data, error }, autorizados] = await Promise.all([
+    supabase
+      .from('cadastros_acesso')
+      .select('email, cpf')
+      .eq('bloqueado', false)
+      .order('email', { ascending: true }),
+    cpfsAutorizados(supabase),
+  ]);
   if (error) throw error;
   const vistos = new Set();
   for (const u of data || []) {
+    if (!autorizados.has(String(u.cpf))) continue;
     const e = String(u.email || '').trim().toLowerCase();
     if (e && EMAIL_RE.test(e)) vistos.add(e);
   }

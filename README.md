@@ -102,10 +102,32 @@ Se precisar reativar um item, basta rodar no SQL Editor do Supabase:
 update items set ativo = true where id = 'ID_DO_ITEM';
 ```
 
+## Lista de colaboradores autorizados (Painel Administrativo → Usuários)
+
+A tabela `colaboradores_autorizados` guarda os CPFs que podem usar o catálogo:
+a relação de colaboradores do RH (origem `RH`) e exceções liberadas pela TI
+(origem `Exceção`, ex.: gestores fora da folha, pessoal da Qcompra). Regras:
+
+- **Cadastro novo** (`POST /api/cadastro`) só é aceito se o CPF estiver na
+  lista e ativo; senão a pessoa vê "Esse CPF não está na relação de
+  colaboradores da Amvox…". Quem já tem cadastro continua entrando com
+  e-mail e senha — pra tirar o acesso de alguém, use **Bloquear** na tela de
+  usuários.
+- A **promoção por e-mail** vai só pra cadastrados que estão na lista.
+- Na tela de usuários, quem não está na lista aparece com o selo
+  **Fora da lista**.
+
+Pra atualizar a lista quando o RH mandar uma relação nova: copie a coluna de
+CPFs (pode ir com o nome junto, "CPF;Nome") e cole no card **Colaboradores
+autorizados**, origem "Relação do RH". CPFs repetidos só são atualizados.
+"Ver lista completa" abre a lista com busca, e cada CPF pode ser desativado
+(não se cadastra mais) ou removido. Rota: `api/autorizados.js` (admin).
+
 ## Promoção por e-mail (Painel Administrativo → aba Promoção)
 
-Manda um e-mail pra **todos os usuários cadastrados** no catálogo (bloqueados
-ficam de fora), usando o mesmo remetente SMTP das notas de débito
+Manda um e-mail pra **todos os usuários cadastrados** que estão na lista de
+colaboradores autorizados (bloqueados e quem está fora da lista não recebem),
+usando o mesmo remetente SMTP das notas de débito
 (`EMAIL_REMETENTE` / `EMAIL_SENHA_APP`). Fluxo:
 
 1. Preencha o **assunto** e a **mensagem** (texto simples — já vem um modelo).

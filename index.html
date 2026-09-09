@@ -219,6 +219,7 @@
 
   .panel-head{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:18px;}
   .form-card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:22px 24px;margin-bottom:26px;}
+  .tabela-autorizados td{padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:middle;}
   .form-card h2{font-size:17px;margin:0 0 4px;}
   .form-card>p{color:var(--ink-soft);font-size:12.8px;margin:0 0 16px;}
   .form-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:14px;}
@@ -454,6 +455,26 @@
           </div>
           <div class="search-box" style="max-width:280px;"><input type="text" id="userSearch" placeholder="Buscar por nome, email ou CPF..."></div>
         </div>
+
+        <div class="form-card" id="autorizadosCard">
+          <h2>Colaboradores autorizados <span id="autorizadosResumo" style="font-size:12.5px;font-weight:600;color:var(--ink-soft);"></span></h2>
+          <p>Só quem tem o CPF nesta lista consegue fazer um cadastro novo, e a promoção por e-mail vai só pra quem está nela. Cole abaixo a relação do RH (um CPF por linha; pode vir como "CPF;Nome") ou um CPF avulso pra liberar uma exceção. Quem já tem cadastro continua entrando — pra tirar o acesso de alguém, use "Bloquear" na lista abaixo.</p>
+          <div class="form-grid">
+            <div class="field span2"><label>CPFs (um por linha)</label><textarea id="autorizadosTexto" style="min-height:96px;" placeholder="039.642.045-10;ADENILDO DAMASCENO SILVA&#10;03454198550"></textarea></div>
+            <div class="field">
+              <label>Origem</label>
+              <select id="autorizadosOrigem"><option value="RH">Relação do RH</option><option value="Exceção">Exceção (liberado pela TI)</option></select>
+              <label style="margin-top:10px;">Observação (opcional)</label>
+              <input type="text" id="autorizadosObs" placeholder="Ex: Relação RH 09/2026">
+            </div>
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+            <button class="btn btn-primary btn-sm" id="autorizadosBtn" onclick="adicionarAutorizados()">Adicionar à lista</button>
+            <button class="btn btn-outline btn-sm" onclick="abrirListaAutorizados()">Ver lista completa</button>
+            <span id="autorizadosMsg" style="font-size:12.5px;color:var(--ink-soft);"></span>
+          </div>
+        </div>
+
         <div id="userList"></div>
         <div class="empty hidden" id="userEmpty"><div class="big">👤</div>Nenhum usuário encontrado.</div>
       </div>
@@ -462,7 +483,7 @@
       <div id="admin-sub-promocao" class="hidden">
         <div class="form-card">
           <h2>Enviar promoção por e-mail</h2>
-          <p id="promoInfo">O e-mail vai pra todos os usuários cadastrados no catálogo (bloqueados ficam de fora). Carregando destinatários...</p>
+          <p id="promoInfo">O e-mail vai pra todos os cadastrados que estão na lista de colaboradores autorizados (bloqueados e quem está fora da lista não recebem). Carregando destinatários...</p>
           <div class="form-grid">
             <div class="field span3"><label>Assunto</label><input type="text" id="promoAssunto" placeholder="Ex: Monitores em promoção — a partir de R$ 50"></div>
             <div class="field span3"><label>Mensagem (texto simples — o e-mail sai formatado, com o link do catálogo num botão)</label><textarea id="promoMensagem" style="min-height:280px;"></textarea></div>
@@ -1946,7 +1967,7 @@ async function renderPromocao(){
     if(!res.ok) throw new Error(d.error || 'Falha ao carregar os destinatários.');
     promoDestinatarios = d.destinatarios || [];
     document.getElementById('promoBtnTodos').textContent = `📣 Enviar para todos (${promoDestinatarios.length})`;
-    info.innerHTML = `O e-mail vai pra <b>${promoDestinatarios.length}</b> usuário(s) cadastrado(s) no catálogo (bloqueados ficam de fora), enviado por <b>${esc(d.remetente || 'remetente não configurado')}</b>. Mande um teste antes de disparar pra todos.`
+    info.innerHTML = `O e-mail vai pra <b>${promoDestinatarios.length}</b> cadastrado(s) que estão na lista de colaboradores autorizados (bloqueados e quem está fora da lista não recebem), enviado por <b>${esc(d.remetente || 'remetente não configurado')}</b>. Mande um teste antes de disparar pra todos.`
       + (d.emailConfigurado ? '' : ' <span style="color:var(--danger);font-weight:600;">E-mail não configurado na Vercel — o envio vai falhar.</span>');
   }catch(err){
     promoDestinatarios = null;
@@ -2347,6 +2368,7 @@ document.getElementById('userSearch').addEventListener('input', e=>{ userSearchT
 let chamadosPorCpf = {};
 
 async function renderUsuarios(){
+  carregarAutorizados().catch(err => console.error('Erro ao carregar autorizados', err));
   try{
     const [res, resCh] = await Promise.all([
       fetch('/api/usuarios', { headers: adminHeaders() }),
@@ -2402,7 +2424,7 @@ function desenharUsuarios(){
     return `
     <div class="manage-row" style="flex-wrap:wrap;">
       <div class="info">
-        <div class="t1">${esc(u.nome)} ${u.bloqueado ? '<span class="badge badge-rep" style="margin-left:8px;">Bloqueado</span>' : ''}</div>
+        <div class="t1">${esc(u.nome)} ${u.bloqueado ? '<span class="badge badge-rep" style="margin-left:8px;">Bloqueado</span>' : ''}${u.autorizado === false ? '<span class="badge badge-dp" style="margin-left:8px;" title="CPF não está na lista de colaboradores autorizados">Fora da lista</span>' : ''}</div>
         <div class="t2">${esc(u.email)} · CPF ${esc(formatCpf(u.cpf))} · ${esc(u.setor||'—')} · último acesso: ${u.ultimo_acesso ? new Date(u.ultimo_acesso).toLocaleString('pt-BR') : '—'}</div>
         <div class="t2">${compraTxt}${ativoTxt}</div>
       </div>
@@ -2415,6 +2437,99 @@ function desenharUsuarios(){
       <div class="edit-box hidden" id="compras-${u.cpf}"></div>
     </div>`;
   }).join('');
+}
+
+/* ============ COLABORADORES AUTORIZADOS (admin) ============
+   Lista de CPFs que podem se cadastrar (relação do RH + exceções da TI).
+   Card na aba Usuários: colar CPFs, ver/desativar/remover. */
+let autorizadosCache = null;
+
+async function carregarAutorizados(){
+  const res = await fetch('/api/autorizados', { headers: adminHeaders() });
+  const d = await res.json();
+  if(!res.ok) throw new Error(d.error || 'Falha ao carregar a lista de autorizados.');
+  autorizadosCache = d;
+  const resumo = document.getElementById('autorizadosResumo');
+  if(resumo){
+    const partes = Object.entries(d.porOrigem || {}).map(([k,v]) => `${v} ${k === 'RH' ? 'do RH' : 'exceção(ões)'}`);
+    resumo.textContent = `· ${d.ativos} CPF(s) ativo(s)${partes.length ? ' — ' + partes.join(', ') : ''}`;
+  }
+  return d;
+}
+
+async function adicionarAutorizados(){
+  const texto = document.getElementById('autorizadosTexto').value.trim();
+  const origem = document.getElementById('autorizadosOrigem').value;
+  const observacao = document.getElementById('autorizadosObs').value.trim();
+  const msg = document.getElementById('autorizadosMsg');
+  const btn = document.getElementById('autorizadosBtn');
+  if(!texto){ showToast('Cole pelo menos um CPF.'); return; }
+  btn.disabled = true; msg.textContent = 'Enviando...';
+  try{
+    const res = await fetch('/api/autorizados', {
+      method:'POST', headers: adminHeaders({'Content-Type':'application/json'}),
+      body: JSON.stringify({ texto, origem, observacao })
+    });
+    const d = await res.json();
+    if(!res.ok) throw new Error(d.error || 'Falha ao adicionar.');
+    const inv = d.invalidos || [];
+    msg.textContent = `✓ ${d.inseridos} novo(s), ${d.atualizados} já existente(s) atualizado(s)`
+      + (inv.length ? ` · ${inv.length} linha(s) inválida(s): ${inv.slice(0,3).join(' | ')}${inv.length>3?'…':''}` : '');
+    document.getElementById('autorizadosTexto').value = '';
+    await renderUsuarios(); // atualiza o resumo e os selos "Fora da lista"
+  }catch(err){
+    msg.textContent = '';
+    showToast(err.message || 'Falha ao adicionar.');
+  }finally{ btn.disabled = false; }
+}
+
+function abrirListaAutorizados(){
+  const d = autorizadosCache;
+  if(!d){ showToast('Lista ainda não carregada. Tente de novo em instantes.'); return; }
+  const linhas = (filtro) => d.lista.filter(r => !filtro || [r.nome, r.cpf, r.chapa, r.origem, r.observacao].map(v=>String(v||'').toLowerCase()).join(' ').includes(filtro)).map(r => `
+    <tr style="${r.ativo ? '' : 'opacity:.55;'}">
+      <td class="mono" style="font-size:11.5px;white-space:nowrap;">${esc(formatCpf(r.cpf))}</td>
+      <td>${esc(r.nome || '—')}${r.chapa ? ` <span style="color:var(--ink-soft);font-size:11px;">(chapa ${esc(r.chapa)})</span>` : ''}${r.observacao ? `<div style="color:var(--ink-soft);font-size:11px;">${esc(r.observacao)}</div>` : ''}</td>
+      <td style="white-space:nowrap;"><span class="badge ${r.origem === 'RH' ? 'badge-ok' : 'badge-pix'}">${esc(r.origem)}</span>${r.ativo ? '' : ' <span class="badge badge-rep">Inativo</span>'}</td>
+      <td style="white-space:nowrap;text-align:right;">
+        <button class="btn btn-outline btn-sm" onclick="alternarAutorizado('${r.cpf}', ${r.ativo ? 'false' : 'true'})">${r.ativo ? 'Desativar' : 'Reativar'}</button>
+        <button class="btn btn-danger-outline btn-sm" onclick="removerAutorizado('${r.cpf}', '${esc(r.nome || r.cpf)}')">Remover</button>
+      </td>
+    </tr>`).join('') || '<tr><td colspan="4" style="color:var(--ink-soft);">Nenhum CPF encontrado.</td></tr>';
+  modalContent.innerHTML = `
+    <div class="modal-head"><h2>Colaboradores autorizados (${d.ativos} ativos de ${d.total})</h2></div>
+    <div class="modal-body">
+      <div class="search-box" style="margin-bottom:10px;"><input type="text" id="autorizadosBusca" placeholder="Buscar por nome, CPF, chapa ou origem..."></div>
+      <div style="max-height:55vh;overflow:auto;">
+        <table class="tabela-autorizados" style="width:100%;border-collapse:collapse;font-size:12.5px;" id="autorizadosTabela"><tbody>${linhas('')}</tbody></table>
+      </div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-primary" onclick="closeModal()">Fechar</button></div>`;
+  document.getElementById('autorizadosBusca').addEventListener('input', e => {
+    document.querySelector('#autorizadosTabela tbody').innerHTML = linhas(e.target.value.trim().toLowerCase());
+  });
+  overlay.classList.remove('hidden');
+}
+
+async function alternarAutorizado(cpf, ativo){
+  try{
+    const res = await fetch('/api/autorizados', {
+      method:'PATCH', headers: adminHeaders({'Content-Type':'application/json'}), body: JSON.stringify({ cpf, ativo })
+    });
+    const d = await res.json();
+    if(!res.ok) throw new Error(d.error || 'Falha na operação.');
+    await carregarAutorizados(); abrirListaAutorizados(); renderUsuarios();
+  }catch(err){ showToast(err.message || 'Falha na operação.'); }
+}
+
+async function removerAutorizado(cpf, nome){
+  if(!confirm(`Remover ${nome} da lista de autorizados?\nSe já tiver cadastro, continua entrando — pra tirar o acesso use "Bloquear" na lista de usuários.`)) return;
+  try{
+    const res = await fetch('/api/autorizados?cpf=' + encodeURIComponent(cpf), { method:'DELETE', headers: adminHeaders() });
+    const d = await res.json();
+    if(!res.ok) throw new Error(d.error || 'Falha ao remover.');
+    await carregarAutorizados(); abrirListaAutorizados(); renderUsuarios();
+  }catch(err){ showToast(err.message || 'Falha ao remover.'); }
 }
 
 function toggleComprasUsuario(cpf){

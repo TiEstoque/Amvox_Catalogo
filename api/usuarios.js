@@ -1,12 +1,13 @@
 // api/usuarios.js
 // Gestão dos usuários cadastrados (Painel Administrativo — exige login de admin).
-// GET    /api/usuarios              -> lista os cadastros
+// GET    /api/usuarios              -> lista os cadastros (com autorizado = CPF está na lista de colaboradores)
 // PATCH  /api/usuarios              -> { cpf, acao: 'senha'|'bloquear'|'desbloquear', novaSenha? }
 // DELETE /api/usuarios?cpf=...      -> exclui o cadastro
 
 import crypto from 'crypto';
 import { getSupabase } from './_supabase.js';
 import { requireAdmin } from './_admin.js';
+import { cpfsAutorizados } from './_autorizados.js';
 
 function hashPassword(password) {
   const salt = crypto.randomBytes(16).toString('hex');
@@ -21,12 +22,17 @@ export default async function handler(req, res) {
     const supabase = getSupabase();
 
     if (req.method === 'GET') {
-      const { data: usuarios, error } = await supabase
-        .from('cadastros_acesso')
-        .select('nome, email, cpf, setor, bloqueado, created_at, ultimo_acesso')
-        .order('nome', { ascending: true });
+      const [{ data: usuarios, error }, autorizados] = await Promise.all([
+        supabase
+          .from('cadastros_acesso')
+          .select('nome, email, cpf, setor, bloqueado, created_at, ultimo_acesso')
+          .order('nome', { ascending: true }),
+        cpfsAutorizados(supabase),
+      ]);
       if (error) throw error;
-      return res.status(200).json({ usuarios });
+      // autorizado = CPF está na lista de colaboradores (RH + exceções)
+      const lista = (usuarios || []).map((u) => ({ ...u, autorizado: autorizados.has(String(u.cpf)) }));
+      return res.status(200).json({ usuarios: lista });
     }
 
     if (req.method === 'PATCH') {
