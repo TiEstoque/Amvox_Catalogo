@@ -18,6 +18,23 @@ export const config = {
   },
 };
 
+// Limite de itens por pessoa (somando reservas ativas e compras). O padrão é
+// 4; a TI pode liberar um limite diferente pra alguém no Painel (Usuários →
+// Limite), que fica em cadastros_acesso.limite_itens.
+const LIMITE_PADRAO = 4;
+async function limiteParaCpf(supabase, cpf) {
+  const limpo = String(cpf || '').replace(/\D/g, '');
+  if (limpo.length !== 11) return LIMITE_PADRAO;
+  const { data, error } = await supabase
+    .from('cadastros_acesso')
+    .select('limite_itens')
+    .eq('cpf', limpo)
+    .maybeSingle();
+  if (error) throw error;
+  const l = data ? data.limite_itens : null;
+  return Number.isInteger(l) && l >= 0 ? l : LIMITE_PADRAO;
+}
+
 export default async function handler(req, res) {
   try {
     const supabase = getSupabase();
@@ -28,7 +45,7 @@ export default async function handler(req, res) {
       // que alguém pague o Pix sem ter saldo.
       const saldoCpf = String(req.query.saldoCpf || '').replace(/\D/g, '');
       if (saldoCpf) {
-        const LIMITE = 4;
+        const LIMITE = await limiteParaCpf(supabase, saldoCpf);
         const { data: chamadosPessoa, error: cpErr } = await supabase
           .from('chamados')
           .select('protocolo, matricula, status');
@@ -158,11 +175,12 @@ export default async function handler(req, res) {
         linhas.push({ item, qty, isStock });
       }
 
-      // Limite: máximo 4 itens por pessoa (por CPF), somando reservas ativas e
+      // Limite: máximo de itens por pessoa (por CPF), somando reservas ativas e
       // compras concluídas — sair e reservar de novo não burla o limite.
-      // Chamado cancelado/reprovado/expirado devolve o direito.
-      const LIMITE_POR_PESSOA = 4;
+      // Chamado cancelado/reprovado/expirado devolve o direito. Padrão 4,
+      // ou o limite individual liberado pela TI (limiteParaCpf).
       const cpfLimpo = String(matricula).replace(/\D/g, '');
+      const LIMITE_POR_PESSOA = await limiteParaCpf(supabase, cpfLimpo);
       const qtdNova = linhas.reduce((a, l) => a + l.qty, 0);
       if (qtdNova > LIMITE_POR_PESSOA) {
         return res.status(400).json({ error: `Limite: no máximo ${LIMITE_POR_PESSOA} itens por pessoa.` });

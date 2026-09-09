@@ -601,6 +601,7 @@ function concluirEntrada(dados){
   }catch(e){}
   document.getElementById('entryGate').classList.add('hidden');
   document.getElementById('appMain').classList.remove('hidden');
+  atualizarLimiteReserva();
 }
 
 async function submitEntryGate(){
@@ -799,14 +800,32 @@ function buildSizeChips(){
 document.getElementById('searchInput').addEventListener('input', e=>{ searchTerm = e.target.value.trim().toLowerCase(); renderGrid(); });
 
 function cartQty(itemId){ const l = cart.find(c=>c.itemId===itemId); return l ? l.quantidade : 0; }
-const LIMITE_POR_RESERVA = 3;
+// Quantos itens a pessoa pode colocar no carrinho: começa no padrão do
+// catálogo (4 por pessoa) e, depois que ela entra, vira o saldo real dela
+// (limite por pessoa menos reservas/compras anteriores). A TI pode liberar um
+// limite maior pra alguém no Painel (Usuários → Limite).
+let LIMITE_POR_RESERVA = 4;
+async function atualizarLimiteReserva(){
+  try{
+    const gateData = JSON.parse(sessionStorage.getItem('amvox_gate_data') || 'null');
+    const cpf = String(gateData && gateData.cpf || '').replace(/\D/g,'');
+    if(cpf.length !== 11) return;
+    const res = await fetch('/api/reservas?saldoCpf=' + encodeURIComponent(cpf));
+    const d = await res.json();
+    if(!res.ok) return;
+    LIMITE_POR_RESERVA = Math.max(0, Number(d.disponivel) || 0);
+    if(typeof renderGrid === 'function' && effectiveCatalog.length){ renderGrid(); renderCartBar(); }
+  }catch(err){ console.error('Erro ao consultar o saldo de itens', err); }
+}
 function maxQtyFor(item){ return Math.min(item.isStock ? item.availableQty : (item.disponivel ? 1 : 0), LIMITE_POR_RESERVA); }
 
 function changeCartQty(itemId, delta){
   const item = effectiveCatalog.find(i=>i.id===itemId);
   if(!item) return;
   if(delta > 0 && cart.reduce((a,c)=>a+c.quantidade,0) >= LIMITE_POR_RESERVA){
-    showToast(`Máximo de ${LIMITE_POR_RESERVA} itens por reserva.`);
+    showToast(LIMITE_POR_RESERVA > 0
+      ? `Você pode reservar no máximo ${LIMITE_POR_RESERVA} ${LIMITE_POR_RESERVA===1?'item':'itens'} (limite por pessoa, somando compras anteriores).`
+      : 'Você já usou o seu limite de itens. Dúvidas? Procure a TI.');
     return;
   }
   let line = cart.find(c=>c.itemId===itemId);
@@ -2425,12 +2444,13 @@ function desenharUsuarios(){
     <div class="manage-row" style="flex-wrap:wrap;">
       <div class="info">
         <div class="t1">${esc(u.nome)} ${u.bloqueado ? '<span class="badge badge-rep" style="margin-left:8px;">Bloqueado</span>' : ''}${u.autorizado === false ? '<span class="badge badge-dp" style="margin-left:8px;" title="CPF não está na lista de colaboradores autorizados">Fora da lista</span>' : ''}</div>
-        <div class="t2">${esc(u.email)} · CPF ${esc(formatCpf(u.cpf))} · ${esc(u.setor||'—')} · último acesso: ${u.ultimo_acesso ? new Date(u.ultimo_acesso).toLocaleString('pt-BR') : '—'}</div>
+        <div class="t2">${esc(u.email)} · CPF ${esc(formatCpf(u.cpf))} · ${esc(u.setor||'—')} · último acesso: ${u.ultimo_acesso ? new Date(u.ultimo_acesso).toLocaleString('pt-BR') : '—'}${Number.isInteger(u.limite_itens) ? ` · <b style="color:var(--primary);">limite: ${u.limite_itens} ${u.limite_itens===1?'item':'itens'}</b> (liberado pela TI)` : ''}</div>
         <div class="t2">${compraTxt}${ativoTxt}</div>
       </div>
       <div class="actions">
         <button class="btn btn-primary btn-sm" onclick="toggleComprasUsuario('${u.cpf}')">Compras</button>
         <button class="btn btn-outline btn-sm" onclick="novaSenhaUsuario('${u.cpf}','${esc(u.nome)}')">Nova senha</button>
+        <button class="btn btn-outline btn-sm" onclick="definirLimiteUsuario('${u.cpf}','${esc(u.nome)}', ${Number.isInteger(u.limite_itens) ? u.limite_itens : 'null'})">Limite</button>
         <button class="btn ${u.bloqueado?'btn-outline':'btn-danger-outline'} btn-sm" onclick="alternarBloqueio('${u.cpf}', ${u.bloqueado ? 'false' : 'true'}, '${esc(u.nome)}')">${u.bloqueado ? 'Desbloquear' : 'Bloquear'}</button>
         <button class="btn btn-danger-outline btn-sm" onclick="excluirUsuario('${u.cpf}','${esc(u.nome)}')">Excluir</button>
       </div>
@@ -2572,6 +2592,14 @@ function novaSenhaUsuario(cpf, nome){
   patchUsuario({ cpf, acao: 'senha', novaSenha: s }, 'Senha alterada! ✓');
 }
 
+function definirLimiteUsuario(cpf, nome, atual){
+  const v = prompt(`Limite de itens para ${nome} (somando reservas e compras).\nPadrão do catálogo: 4. Deixe em branco pra voltar ao padrão.`, atual === null ? '' : String(atual));
+  if(v === null) return;
+  const limpo = v.trim();
+  if(limpo !== '' && !/^\d{1,2}$/.test(limpo)){ showToast('Digite um número de 0 a 50, ou deixe em branco.'); return; }
+  patchUsuario({ cpf, acao: 'limite', limite: limpo === '' ? null : parseInt(limpo, 10) }, limpo === '' ? 'Limite voltou ao padrão (4). ✓' : `Limite de ${limpo} itens liberado. ✓`);
+}
+
 function alternarBloqueio(cpf, bloquear, nome){
   if(bloquear && !confirm(`Bloquear o acesso de ${nome}? Essa pessoa não vai mais conseguir entrar no catálogo.`)) return;
   patchUsuario({ cpf, acao: bloquear ? 'bloquear' : 'desbloquear' }, bloquear ? 'Usuário bloqueado.' : 'Usuário desbloqueado. ✓');
@@ -2599,6 +2627,7 @@ async function excluirUsuario(cpf, nome){
   buildChips();
   renderGrid();
   renderCartBar();
+  atualizarLimiteReserva();
 })();
 </script>
 </body>

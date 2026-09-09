@@ -3,7 +3,7 @@
 // GET    /api/usuarios              -> lista os cadastros (com autorizado = CPF está na lista de colaboradores)
 // ...    /api/usuarios?recurso=autorizados -> gestão da lista de CPFs autorizados (GET lista, POST cola CPFs,
 //                                             PATCH {cpf, ativo}, DELETE &cpf=...) — código em _autorizados.js
-// PATCH  /api/usuarios              -> { cpf, acao: 'senha'|'bloquear'|'desbloquear', novaSenha? }
+// PATCH  /api/usuarios              -> { cpf, acao: 'senha'|'bloquear'|'desbloquear'|'limite', novaSenha?, limite? }
 // DELETE /api/usuarios?cpf=...      -> exclui o cadastro
 
 import crypto from 'crypto';
@@ -32,7 +32,7 @@ export default async function handler(req, res) {
       const [{ data: usuarios, error }, autorizados] = await Promise.all([
         supabase
           .from('cadastros_acesso')
-          .select('nome, email, cpf, setor, bloqueado, created_at, ultimo_acesso')
+          .select('nome, email, cpf, setor, bloqueado, created_at, ultimo_acesso, limite_itens')
           .order('nome', { ascending: true }),
         cpfsAutorizados(supabase),
       ]);
@@ -67,6 +67,24 @@ export default async function handler(req, res) {
           .eq('cpf', cpf);
         if (error) throw error;
         return res.status(200).json({ ok: true, acao });
+      }
+
+      // Limite individual de itens (null = volta pro padrão do catálogo)
+      if (acao === 'limite') {
+        const bruto = body.limite;
+        let limite = null;
+        if (bruto !== null && bruto !== undefined && String(bruto).trim() !== '') {
+          limite = parseInt(String(bruto).trim(), 10);
+          if (!Number.isInteger(limite) || limite < 0 || limite > 50) {
+            return res.status(400).json({ error: 'Limite inválido: use um número de 0 a 50, ou deixe em branco pra voltar ao padrão.' });
+          }
+        }
+        const { error } = await supabase
+          .from('cadastros_acesso')
+          .update({ limite_itens: limite })
+          .eq('cpf', cpf);
+        if (error) throw error;
+        return res.status(200).json({ ok: true, acao, limite });
       }
 
       if (acao === 'bloquear' || acao === 'desbloquear') {
