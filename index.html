@@ -373,6 +373,7 @@
         <button class="subtab-btn" data-sub="vendidos" onclick="switchAdminSub('vendidos')">Itens vendidos</button>
         <button class="subtab-btn" data-sub="usuarios" onclick="switchAdminSub('usuarios')">Usuários</button>
         <button class="subtab-btn" data-sub="vendas" onclick="switchAdminSub('vendas')">Vendas</button>
+        <button class="subtab-btn" data-sub="promocao" onclick="switchAdminSub('promocao')">📣 Promoção</button>
       </div>
 
       <!-- Sub: Chamados -->
@@ -455,6 +456,25 @@
         </div>
         <div id="userList"></div>
         <div class="empty hidden" id="userEmpty"><div class="big">👤</div>Nenhum usuário encontrado.</div>
+      </div>
+
+      <!-- Sub: Promoção (e-mail em lote pra todos os cadastrados) -->
+      <div id="admin-sub-promocao" class="hidden">
+        <div class="form-card">
+          <h2>Enviar promoção por e-mail</h2>
+          <p id="promoInfo">O e-mail vai pra todos os usuários cadastrados no catálogo (bloqueados ficam de fora). Carregando destinatários...</p>
+          <div class="form-grid">
+            <div class="field span3"><label>Assunto</label><input type="text" id="promoAssunto" placeholder="Ex: Monitores em promoção — a partir de R$ 50"></div>
+            <div class="field span3"><label>Mensagem (texto simples — o e-mail sai formatado, com o link do catálogo num botão)</label><textarea id="promoMensagem" style="min-height:280px;"></textarea></div>
+            <div class="field span2"><label>E-mail pro teste (opcional — em branco manda pro remetente do catálogo)</label><input type="text" id="promoTesteEmail" placeholder="seuemail@amvox.com.br"></div>
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+            <button class="btn btn-outline" id="promoBtnTeste" onclick="enviarPromocao(true)">✉️ Enviar teste</button>
+            <button class="btn btn-primary" id="promoBtnTodos" onclick="enviarPromocao(false)">📣 Enviar para todos</button>
+            <button class="btn btn-outline btn-sm" onclick="preencherModeloPromocao(true)">Restaurar modelo</button>
+          </div>
+          <div id="promoProgress" class="hidden" style="margin-top:14px;font-size:13.5px;line-height:1.6;"></div>
+        </div>
       </div>
 
       <!-- Sub: Vendas -->
@@ -1485,10 +1505,12 @@ function switchAdminSub(name){
   document.getElementById('admin-sub-vendidos').classList.toggle('hidden', name!=='vendidos');
   document.getElementById('admin-sub-usuarios').classList.toggle('hidden', name!=='usuarios');
   document.getElementById('admin-sub-vendas').classList.toggle('hidden', name!=='vendas');
+  document.getElementById('admin-sub-promocao').classList.toggle('hidden', name!=='promocao');
   if(name==='chamados') renderDP();
   else if(name==='catalogo') renderManageList();
   else if(name==='vendidos') renderVendidos();
   else if(name==='usuarios') renderUsuarios();
+  else if(name==='promocao') renderPromocao();
   else renderVendas();
 }
 
@@ -1874,6 +1896,116 @@ async function avisarFilaConferencia(btn){
   }finally{
     btn.disabled = false; btn.textContent = original;
   }
+}
+
+/* ============ PROMOÇÃO POR E-MAIL (admin) ============
+   Aba "Promoção" do Painel: manda um e-mail pra todos os cadastrados
+   (menos bloqueados). A lista vem de GET /api/promocao e o envio é feito
+   em lotes de PROMO_LOTE via POST /api/promocao, mostrando o progresso. */
+let promoDestinatarios = null;
+const PROMO_LOTE = 10;
+
+function modeloPromocao(){
+  return [
+    'Olá, pessoal!',
+    '',
+    'Baixamos o preço dos monitores do Catálogo de Vendas Internas. Confira os novos valores:',
+    '',
+    '• Monitores 18,5" (AOC E970SWHNL / E950SW, Dell E1912HC): de R$ 100 por R$ 50',
+    '• Monitores 17" (PCTOP MLP1): de R$ 80 a 100 por R$ 60',
+    '• Monitores 19,5" (Lenovo ThinkVision E2002ba, LOGIN): de R$ 90 a 150 por R$ 60',
+    '',
+    'Como funciona:',
+    '1. Acesse o catálogo, entre com seu cadastro (ou faça o cadastro na hora) e escolha o monitor. Cada item mostra o modelo, as entradas (VGA, HDMI, DVI) e a condição.',
+    '2. Limite de 4 itens por pessoa, somando reservas e compras anteriores.',
+    '3. O pagamento é por Pix na hora da reserva: pague, anexe o comprovante e a Nota de Débito sai na hora.',
+    '4. Depois, abra o chamado no Gestão. O Fiscal libera em até 72h e a TI avisa por e-mail o horário da retirada.',
+    '',
+    'Importante: a compra é exclusiva para colaboradores ativos da Amvox e não é permitida a venda para terceiros. Os equipamentos são usados e a condição de cada um está descrita no catálogo. Estoque limitado: quem reservar primeiro, leva.',
+    '',
+    'Qualquer dúvida, é só chamar a TI.',
+    '',
+    'Atenciosamente,',
+    'TI Amvox',
+  ].join('\n');
+}
+
+function preencherModeloPromocao(forcar){
+  const assunto = document.getElementById('promoAssunto');
+  const msg = document.getElementById('promoMensagem');
+  if(forcar || !assunto.value.trim()) assunto.value = 'Monitores em promoção no Catálogo de Vendas Internas — a partir de R$ 50';
+  if(forcar || !msg.value.trim()) msg.value = modeloPromocao();
+}
+
+async function renderPromocao(){
+  preencherModeloPromocao(false);
+  const info = document.getElementById('promoInfo');
+  try{
+    const res = await fetch('/api/promocao', { headers: adminHeaders() });
+    const d = await res.json();
+    if(!res.ok) throw new Error(d.error || 'Falha ao carregar os destinatários.');
+    promoDestinatarios = d.destinatarios || [];
+    document.getElementById('promoBtnTodos').textContent = `📣 Enviar para todos (${promoDestinatarios.length})`;
+    info.innerHTML = `O e-mail vai pra <b>${promoDestinatarios.length}</b> usuário(s) cadastrado(s) no catálogo (bloqueados ficam de fora), enviado por <b>${esc(d.remetente || 'remetente não configurado')}</b>. Mande um teste antes de disparar pra todos.`
+      + (d.emailConfigurado ? '' : ' <span style="color:var(--danger);font-weight:600;">E-mail não configurado na Vercel — o envio vai falhar.</span>');
+  }catch(err){
+    promoDestinatarios = null;
+    info.innerHTML = `<span style="color:var(--danger);font-weight:600;">${esc(err.message)}</span>`;
+  }
+}
+
+async function enviarPromocao(teste){
+  const assunto = document.getElementById('promoAssunto').value.trim();
+  const mensagem = document.getElementById('promoMensagem').value.trim();
+  const prog = document.getElementById('promoProgress');
+  if(!assunto || !mensagem){ alert('Preencha o assunto e a mensagem.'); return; }
+  const btnTeste = document.getElementById('promoBtnTeste');
+  const btnTodos = document.getElementById('promoBtnTodos');
+  const setBusy = (b) => { btnTeste.disabled = b; btnTodos.disabled = b; };
+
+  if(teste){
+    const destino = document.getElementById('promoTesteEmail').value.trim();
+    setBusy(true); prog.classList.remove('hidden'); prog.textContent = 'Enviando teste...';
+    try{
+      const res = await fetch('/api/promocao', {
+        method: 'POST', headers: adminHeaders({'Content-Type':'application/json'}),
+        body: JSON.stringify({ assunto, mensagem, teste: destino })
+      });
+      const d = await res.json();
+      if(!res.ok) throw new Error(d.error || 'Falha ao enviar o teste.');
+      prog.innerHTML = `✅ Teste enviado para <b>${esc(d.destino)}</b>. Confira a caixa de entrada (e o spam) antes de disparar pra todos.`;
+    }catch(err){
+      prog.innerHTML = `<span style="color:var(--danger);font-weight:600;">Erro: ${esc(err.message)}</span>`;
+    }finally{ setBusy(false); }
+    return;
+  }
+
+  if(!promoDestinatarios || !promoDestinatarios.length){ alert('Lista de destinatários não carregada. Feche e abra a aba Promoção de novo.'); return; }
+  if(!confirm(`Enviar "${assunto}" para ${promoDestinatarios.length} cadastrado(s)?\n\nDica: mande um teste antes pra ver como ficou.`)) return;
+
+  setBusy(true); prog.classList.remove('hidden');
+  const total = promoDestinatarios.length;
+  let enviados = 0; const erros = []; const ignorados = [];
+  try{
+    for(let i = 0; i < total; i += PROMO_LOTE){
+      const lote = promoDestinatarios.slice(i, i + PROMO_LOTE);
+      prog.textContent = `Enviando ${Math.min(i + lote.length, total)} de ${total}...`;
+      const res = await fetch('/api/promocao', {
+        method: 'POST', headers: adminHeaders({'Content-Type':'application/json'}),
+        body: JSON.stringify({ assunto, mensagem, destinatarios: lote })
+      });
+      const d = await res.json();
+      if(!res.ok) throw new Error(d.error || 'Falha no envio do lote.');
+      enviados += d.enviados || 0;
+      (d.erros || []).forEach(e => erros.push(`${e.email}: ${e.erro}`));
+      (d.ignorados || []).forEach(e => ignorados.push(e));
+    }
+    prog.innerHTML = `✅ Promoção enviada: <b>${enviados}</b> de ${total}.`
+      + (erros.length ? `<br><span style="color:var(--danger);font-weight:600;">${erros.length} erro(s):</span><br>${erros.map(esc).join('<br>')}` : '')
+      + (ignorados.length ? `<br>${ignorados.length} ignorado(s) (sem cadastro ou bloqueado).` : '');
+  }catch(err){
+    prog.innerHTML = `<span style="color:var(--danger);font-weight:600;">Erro: ${esc(err.message)}</span> — enviados até agora: ${enviados} de ${total}.`;
+  }finally{ setBusy(false); }
 }
 
 async function dpDecide(protocolo, decisao){

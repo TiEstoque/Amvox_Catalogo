@@ -8,6 +8,9 @@
     },
     "api/reservas/index.js": {
       "maxDuration": 30
+    },
+    "api/promocao.js": {
+      "maxDuration": 30
     }
   }
 }

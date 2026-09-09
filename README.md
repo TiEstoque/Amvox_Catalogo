@@ -102,6 +102,26 @@ Se precisar reativar um item, basta rodar no SQL Editor do Supabase:
 update items set ativo = true where id = 'ID_DO_ITEM';
 ```
 
+## Promoção por e-mail (Painel Administrativo → aba Promoção)
+
+Manda um e-mail pra **todos os usuários cadastrados** no catálogo (bloqueados
+ficam de fora), usando o mesmo remetente SMTP das notas de débito
+(`EMAIL_REMETENTE` / `EMAIL_SENHA_APP`). Fluxo:
+
+1. Preencha o **assunto** e a **mensagem** (texto simples — já vem um modelo).
+   O e-mail sai formatado, com cabeçalho do catálogo e um botão "Ver o catálogo"
+   apontando pro endereço do site (`SITE_URL`, se definida; senão o domínio da
+   própria requisição).
+2. Clique em **Enviar teste** pra receber uma cópia e conferir como ficou.
+3. Clique em **Enviar para todos (N)** e confirme. O envio é feito em lotes de
+   10 pela rota `POST /api/promocao` (máx. 20 por chamada, 5 simultâneos), com
+   progresso na tela; cada envio fica registrado em `email_logs`.
+
+A rota só aceita destinatários que existam em `cadastros_acesso` e não estejam
+bloqueados — mesmo com o token de admin, não dá pra usá-la pra mandar e-mail
+pra endereços de fora. Lembre-se do limite diário do Gmail (cerca de 500
+destinatários/dia na conta comum), que também conta os e-mails automáticos.
+
 ## Domínio próprio (opcional)
 
 Se quiser usar algo como `catalogo.amvoxtech.com.br` em vez do `.vercel.app`:

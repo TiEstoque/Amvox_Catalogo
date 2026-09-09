@@ -27,7 +27,7 @@ async function registrarLog(para, assunto, ok, erro) {
   }
 }
 
-export async function enviarEmail({ para, assunto, texto, anexos }) {
+export async function enviarEmail({ para, assunto, texto, html, anexos }) {
   const porta = Number(process.env.EMAIL_SMTP_PORT || 465);
   const transporter = nodemailer.createTransport({
     host: process.env.EMAIL_SMTP_HOST || 'smtp.gmail.com',
@@ -45,6 +45,7 @@ export async function enviarEmail({ para, assunto, texto, anexos }) {
       to: para,
       subject: assunto,
       text: texto,
+      html: html || undefined, // opcional: versão formatada (ex.: promoção)
       attachments: anexos,
     });
     await registrarLog(para, assunto, true, null);
