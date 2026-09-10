@@ -1,21 +1,30 @@
 // api/notas-debito/index.js
-// GET /api/notas-debito?protocolo=AMX-00018                    -> admin (com token)
-// GET /api/notas-debito?protocolo=AMX-00018&matricula=CPF      -> associado do próprio chamado
+// GET  /api/notas-debito?protocolo=AMX-00018                    -> admin (com token)
+// GET  /api/notas-debito?protocolo=AMX-00018&matricula=CPF      -> associado do próprio chamado
 // Retorna a ND daquele chamado (numero + link assinado de download), se existir.
+// POST /api/notas-debito?protocolo=AMX-00018                    -> admin: regera o arquivo da ND
+//      (mesmo número e data) com os dados atuais do chamado/itens.
 
 import { getSupabase } from '../_supabase.js';
-import { verifyToken } from '../_admin.js';
+import { verifyToken, requireAdmin } from '../_admin.js';
+import { regerarNotaDebito } from '../_concluir.js';
 
 export default async function handler(req, res) {
   try {
-    if (req.method !== 'GET') {
-      res.setHeader('Allow', 'GET');
-      return res.status(405).json({ error: 'Método não permitido.' });
-    }
-
     const supabase = getSupabase();
     const protocolo = String(req.query.protocolo || '').trim();
     if (!protocolo) return res.status(400).json({ error: 'Parâmetro "protocolo" ausente.' });
+
+    if (req.method === 'POST') {
+      if (!requireAdmin(req, res)) return;
+      const numero = await regerarNotaDebito({ supabase, protocolo });
+      return res.status(200).json({ ok: true, numero, regerada: true });
+    }
+
+    if (req.method !== 'GET') {
+      res.setHeader('Allow', 'GET, POST');
+      return res.status(405).json({ error: 'Método não permitido.' });
+    }
 
     // Admin (com token) baixa qualquer ND; o associado baixa a do próprio
     // chamado informando o CPF usado na reserva.

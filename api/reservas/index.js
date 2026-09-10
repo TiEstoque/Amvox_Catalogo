@@ -418,6 +418,7 @@ export default async function handler(req, res) {
           titulo: l.item.titulo,
           quantidade: l.qty,
           is_stock: l.isStock,
+          preco: l.item.preco,
         }));
         notaDebitoNumero = await gerarNdEEmail({ supabase, chamado: chamadoNd, itens: itensNd });
         await enviarAvisoFiscal({ chamado: chamadoNd, itens: itensNd });

@@ -14,6 +14,103 @@ import { enviarEmail, emailConfigurado } from './_email.js';
 
 const EMAIL_NOTAS = process.env.EMAIL_NOTAS_DESTINO || 'entradanotasfiscais@amvox.com.br';
 
+// Descrição e foto dos itens (pro corpo da ND e conferência visual).
+async function montarDadosNd(supabase, itens) {
+  const ids = [...new Set(itens.map((it) => it.item_id).filter(Boolean))];
+  const infoPorId = {};
+  if (ids.length) {
+    const { data: itemRows } = await supabase.from('items').select('id, descricao, foto_url').in('id', ids);
+    (itemRows || []).forEach((r) => { infoPorId[r.id] = r; });
+  }
+  const itensNd = itens.map((it) => {
+    const info = infoPorId[it.item_id] || {};
+    return {
+      numero: it.numero,
+      titulo: it.titulo,
+      quantidade: it.quantidade,
+      isStock: !!it.is_stock,
+      preco: it.preco,
+      descricao: info.descricao && info.descricao !== '—' ? info.descricao : '',
+    };
+  });
+  const fotos = [];
+  for (const it of itens) {
+    if (fotos.length >= 2) break;
+    const url = infoPorId[it.item_id]?.foto_url;
+    if (!url || /\.webp(\?|$)/i.test(url)) continue;
+    try {
+      const resp = await fetch(url);
+      if (!resp.ok) continue;
+      fotos.push({
+        buffer: Buffer.from(await resp.arrayBuffer()),
+        extension: /\.png(\?|$)/i.test(url) ? 'png' : 'jpeg',
+      });
+    } catch (fotoErr) {
+      console.error('ND: falha ao baixar foto do item', it.item_id, fotoErr.message);
+    }
+  }
+  return { itensNd, fotos };
+}
+
+// Regera o arquivo de uma ND já emitida (mesmo número e data), com os dados
+// atuais do chamado e dos itens — pra corrigir descrição/valores por linha.
+// Não manda e-mail; o admin baixa e encaminha se precisar.
+export async function regerarNotaDebito({ supabase, protocolo }) {
+  const { data: nota, error: ndErr } = await supabase
+    .from('notas_debito')
+    .select('*')
+    .eq('chamado_protocolo', protocolo)
+    .maybeSingle();
+  if (ndErr) throw ndErr;
+  if (!nota) throw new Error('Esse chamado ainda não tem Nota de Débito.');
+
+  const { data: chamado, error: chErr } = await supabase
+    .from('chamados')
+    .select('*')
+    .eq('protocolo', protocolo)
+    .maybeSingle();
+  if (chErr) throw chErr;
+  if (!chamado) throw new Error('Chamado não encontrado.');
+
+  const { data: itens, error: itErr } = await supabase
+    .from('chamado_itens')
+    .select('*')
+    .eq('chamado_protocolo', protocolo);
+  if (itErr) throw itErr;
+
+  const { itensNd, fotos } = await montarDadosNd(supabase, itens || []);
+  const numeroExistente = Number(nota.numero);
+  const sequencial = Number(nota.sequencial);
+  const dataEmissao = nota.data_emissao ? new Date(`${nota.data_emissao}T12:00:00Z`) : new Date();
+
+  const { buffer } = await gerarNotaDebito({
+    protocolo,
+    pagador: chamado.nome,
+    cpf: chamado.matricula,
+    valorTotal: Number(chamado.valor_total),
+    itens: itensNd,
+    fotos,
+    dataEmissao,
+    getNumeroNd: async () => ({ numero: numeroExistente, sequencial }),
+  });
+
+  const arquivoPath = nota.arquivo_path || `${numeroExistente}.xlsx`;
+  const { error: upErr } = await supabase.storage
+    .from('notas-debito')
+    .upload(arquivoPath, buffer, {
+      contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      upsert: true,
+    });
+  if (upErr) throw upErr;
+
+  await supabase
+    .from('notas_debito')
+    .update({ valor: Number(chamado.valor_total), arquivo_path: arquivoPath })
+    .eq('numero', numeroExistente);
+
+  return numeroExistente;
+}
+
 export async function gerarNdEEmail({ supabase, chamado, itens }) {
   const protocolo = chamado.protocolo;
   if (chamado.pagamento !== 'Pix') return null;
@@ -27,39 +124,7 @@ export async function gerarNdEEmail({ supabase, chamado, itens }) {
   if (ndExistente) return ndExistente.numero;
 
   try {
-    // descrição e foto dos itens (pro corpo da ND e conferência visual)
-    const ids = [...new Set(itens.map((it) => it.item_id).filter(Boolean))];
-    const infoPorId = {};
-    if (ids.length) {
-      const { data: itemRows } = await supabase.from('items').select('id, descricao, foto_url').in('id', ids);
-      (itemRows || []).forEach((r) => { infoPorId[r.id] = r; });
-    }
-    const itensNd = itens.map((it) => {
-      const info = infoPorId[it.item_id] || {};
-      return {
-        numero: it.numero,
-        titulo: it.titulo,
-        quantidade: it.quantidade,
-        isStock: !!it.is_stock,
-        descricao: info.descricao && info.descricao !== '—' ? info.descricao : '',
-      };
-    });
-    const fotos = [];
-    for (const it of itens) {
-      if (fotos.length >= 2) break;
-      const url = infoPorId[it.item_id]?.foto_url;
-      if (!url || /\.webp(\?|$)/i.test(url)) continue;
-      try {
-        const resp = await fetch(url);
-        if (!resp.ok) continue;
-        fotos.push({
-          buffer: Buffer.from(await resp.arrayBuffer()),
-          extension: /\.png(\?|$)/i.test(url) ? 'png' : 'jpeg',
-        });
-      } catch (fotoErr) {
-        console.error('ND: falha ao baixar foto do item', it.item_id, fotoErr.message);
-      }
-    }
+    const { itensNd, fotos } = await montarDadosNd(supabase, itens);
 
     const dataEmissao = new Date();
     const { numero, buffer } = await gerarNotaDebito({

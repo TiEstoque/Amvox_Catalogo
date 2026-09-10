@@ -11,16 +11,30 @@ import { ND_TEMPLATE_BASE64 } from './_nd_template.js';
 // Modelo suporta até 2 itens na tabela (linhas 13 e 14). Com mais que isso,
 // concatena os demais na descrição do 2º item pra não perder informação.
 // Item de estoque (SSD, cooler etc.) não tem patrimônio: sai só o nome.
-function montarItens(itensChamado) {
+// Cada linha leva o seu valor (preço x quantidade); com 3+ itens, a 2ª linha
+// soma o valor dos demais. O total da ND é =SUM(C13:C14) no modelo, então
+// as duas linhas sempre fecham com o total do chamado.
+function montarItens(itensChamado, valorTotal) {
   const linhas = itensChamado.map((it) => {
     const prefixo = it.isStock ? '' : `Nº ${it.numero} — `;
     const desc = it.descricao ? ` — ${it.descricao}` : '';
-    return `${prefixo}${it.titulo}${desc}${it.quantidade > 1 ? ` (${it.quantidade}x)` : ''}`;
+    const qtd = Number(it.quantidade) || 1;
+    const valorUnit = Number(it.preco);
+    return {
+      texto: `${prefixo}${it.titulo}${desc}${qtd > 1 ? ` (${qtd}x)` : ''}`,
+      valor: Number.isFinite(valorUnit) ? valorUnit * qtd : null,
+    };
   });
-  if (linhas.length <= 2) return linhas;
-  const primeiras = linhas.slice(0, 1);
-  const resto = linhas.slice(1).join('; ');
-  return [...primeiras, resto];
+  const total = Number(valorTotal) || 0;
+  if (linhas.length <= 1) return [{ texto: linhas[0] ? linhas[0].texto : '', valor: total }];
+  const primeira = linhas[0];
+  const restoTexto = linhas.slice(1).map((l) => l.texto).join('; ');
+  // se algum preço não veio, mantém o comportamento antigo: tudo na 1ª linha
+  const valorPrimeira = linhas.every((l) => l.valor !== null) ? Math.min(primeira.valor, total) : total;
+  return [
+    { texto: primeira.texto, valor: valorPrimeira },
+    { texto: restoTexto, valor: Math.max(0, total - valorPrimeira) },
+  ];
 }
 
 // CPF entra na nota formatado (000.000.000-00); se vier em formato
@@ -63,14 +77,14 @@ export async function gerarNotaDebito({ protocolo, pagador, cpf, valorTotal, ite
   // 3) ND — item(ns), número e pagador espelhados (valores fixos, como o D2)
   nd.getCell('D2').value = numero;
   nd.getCell('A9').value = `Pagador: ${pagadorComCpf}`;
-  const linhasItens = montarItens(itens);
+  const linhasItens = montarItens(itens, valorTotal);
   nd.getCell('A13').value = 1;
-  nd.getCell('B13').value = linhasItens[0] || '';
-  nd.getCell('C13').value = valorTotal;
+  nd.getCell('B13').value = linhasItens[0].texto;
+  nd.getCell('C13').value = linhasItens[0].valor;
   if (linhasItens[1]) {
     nd.getCell('A14').value = 2;
-    nd.getCell('B14').value = linhasItens[1];
-    // valor todo já foi lançado na linha 1 (C13) pra bater com o total do chamado
+    nd.getCell('B14').value = linhasItens[1].texto;
+    nd.getCell('C14').value = linhasItens[1].valor; // total = SUM(C13:C14) no modelo
   }
 
   // descrições podem ser longas: quebra de linha + altura maior nas linhas de item

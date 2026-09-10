@@ -2045,7 +2045,7 @@ async function renderDP(){
       <div class="dp-actions">
         <button class="btn btn-outline btn-sm" onclick="baixarResumoAdmin('${c.protocolo}')">Baixar resumo</button>
         ${c.temComprovante ? `<button class="btn btn-outline btn-sm" onclick="verComprovanteAdmin('${c.protocolo}')">Ver comprovante do Pix</button>` : ''}
-        ${c.status==='Concluído' && c.pagamento==='Pix' ? `<button class="btn btn-outline btn-sm" onclick="baixarNotaDebito('${c.protocolo}', this)">Baixar Nota de Débito</button>` : ''}
+        ${['Em liberação do Fiscal','Aguardando conferência da TI','Concluído'].includes(c.status) && c.pagamento==='Pix' ? `<button class="btn btn-outline btn-sm" onclick="baixarNotaDebito('${c.protocolo}', this)">Baixar Nota de Débito</button><button class="btn btn-outline btn-sm" onclick="regerarNotaDebito('${c.protocolo}', this)" title="Refaz o arquivo da ND (mesmo número) com a descrição e os valores atuais dos itens">Regerar ND</button>` : ''}
       </div>
       ${actions}
     </div>`;
@@ -2067,6 +2067,22 @@ async function baixarNotaDebito(protocolo, btnEl){
   } finally {
     btnEl.textContent = original;
     btnEl.disabled = false;
+  }
+}
+
+async function regerarNotaDebito(protocolo, btnEl){
+  if(!confirm(`Regerar a Nota de Débito do chamado ${protocolo}?\nO arquivo é refeito com o mesmo número, usando a descrição e os valores atuais dos itens (uma linha por item).`)) return;
+  const original = btnEl.textContent;
+  btnEl.textContent = 'Regerando...'; btnEl.disabled = true;
+  try{
+    const res = await fetch('/api/notas-debito?protocolo=' + encodeURIComponent(protocolo), { method:'POST', headers: adminHeaders() });
+    const data = await res.json();
+    if(!res.ok) throw new Error(data.error || data.message || 'Falha ao regerar a ND.');
+    showToast(`ND ${data.numero} regerada ✓ — clique em "Baixar Nota de Débito" pra conferir.`);
+  } catch(err){
+    showToast(err.message || 'Não foi possível regerar a ND.');
+  } finally {
+    btnEl.textContent = original; btnEl.disabled = false;
   }
 }
 
