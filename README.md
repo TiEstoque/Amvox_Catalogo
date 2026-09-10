@@ -111,6 +111,16 @@ verde/escura no topo e bloqueia o botão Finalizar fora do horário. Pra mudar
 o horário, ajuste `JANELA_INICIO_MIN`/`JANELA_FIM_MIN` em
 `api/reservas/index.js` e `JANELA_COMPRAS` no `index.html`.
 
+## Limite de itens e "segunda rodada"
+
+Cada pessoa pode comprar até 4 itens somando reservas e compras (limite
+individual: botão **Limite** no usuário, coluna `cadastros_acesso.limite_itens`).
+O card **Limite de itens por pessoa** (Painel → Usuários) tem o botão **Zerar
+contagem (segunda rodada)**: grava a data/hora em `config_catalogo.limite_desde`
+e, a partir daí, só os chamados abertos depois dessa data contam no limite — o
+histórico não muda, mas todo mundo volta a ter a cota inteira. "Voltar a contar
+todas as compras" desfaz.
+
 ## Lista de colaboradores autorizados (Painel Administrativo → Usuários)
 
 A tabela `colaboradores_autorizados` guarda os CPFs que podem usar o catálogo:

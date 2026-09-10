@@ -461,6 +461,15 @@
           <div class="search-box" style="max-width:280px;"><input type="text" id="userSearch" placeholder="Buscar por nome, email ou CPF..."></div>
         </div>
 
+        <div class="form-card" id="limiteCard">
+          <h2>Limite de itens por pessoa <span id="limiteResumo" style="font-size:12.5px;font-weight:600;color:var(--ink-soft);"></span></h2>
+          <p id="limiteTexto">Cada pessoa pode comprar até 4 itens (ou o limite individual liberado no botão "Limite" de cada usuário), somando reservas e compras. Carregando...</p>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+            <button class="btn btn-primary btn-sm" id="limiteBtnZerar" onclick="zerarContagemLimite()">🔄 Zerar contagem (segunda rodada)</button>
+            <button class="btn btn-outline btn-sm hidden" id="limiteBtnRestaurar" onclick="restaurarContagemLimite()">Voltar a contar todas as compras</button>
+          </div>
+        </div>
+
         <div class="form-card" id="autorizadosCard">
           <h2>Colaboradores autorizados <span id="autorizadosResumo" style="font-size:12.5px;font-weight:600;color:var(--ink-soft);"></span></h2>
           <p>Só quem tem o CPF nesta lista consegue fazer um cadastro novo, e a promoção por e-mail vai só pra quem está nela. Cole abaixo a relação do RH (um CPF por linha; pode vir como "CPF;Nome") ou um CPF avulso pra liberar uma exceção. Quem já tem cadastro continua entrando — pra tirar o acesso de alguém, use "Bloquear" na lista abaixo.</p>
@@ -2521,6 +2530,7 @@ let chamadosPorCpf = {};
 
 async function renderUsuarios(){
   carregarAutorizados().catch(err => console.error('Erro ao carregar autorizados', err));
+  carregarContagemLimite().catch(err => console.error('Erro ao carregar contagem do limite', err));
   try{
     const [res, resCh] = await Promise.all([
       fetch('/api/usuarios', { headers: adminHeaders() }),
@@ -2596,6 +2606,45 @@ function desenharUsuarios(){
    Lista de CPFs que podem se cadastrar (relação do RH + exceções da TI).
    Card na aba Usuários: colar CPFs, ver/desativar/remover. */
 let autorizadosCache = null;
+
+/* ============ CONTAGEM DO LIMITE (segunda rodada) ============ */
+async function carregarContagemLimite(){
+  const txt = document.getElementById('limiteTexto');
+  if(!txt) return;
+  try{
+    const res = await fetch('/api/usuarios?recurso=limite', { headers: adminHeaders() });
+    const d = await res.json();
+    if(!res.ok) throw new Error(d.error || 'Falha ao consultar a contagem do limite.');
+    const desde = d.limiteDesde ? new Date(d.limiteDesde) : null;
+    document.getElementById('limiteBtnRestaurar').classList.toggle('hidden', !desde);
+    document.getElementById('limiteResumo').textContent = desde ? `· contando desde ${desde.toLocaleString('pt-BR')}` : '· contando todas as compras';
+    txt.innerHTML = desde
+      ? `Cada pessoa pode comprar até 4 itens (ou o limite individual liberado no botão "Limite"). <b>Segunda rodada ativa:</b> só as reservas e compras feitas a partir de <b>${desde.toLocaleString('pt-BR')}</b> contam no limite — as anteriores ficam no histórico, mas não descontam.`
+      : `Cada pessoa pode comprar até 4 itens (ou o limite individual liberado no botão "Limite"), somando <b>todas</b> as reservas e compras. "Zerar contagem" abre uma segunda rodada: as compras já feitas deixam de contar e todo mundo volta a ter a cota inteira.`;
+  }catch(err){
+    txt.innerHTML = `<span style="color:var(--danger);font-weight:600;">${esc(err.message)}</span>`;
+  }
+}
+
+async function zerarContagemLimite(){
+  if(!confirm('Zerar a contagem do limite pra TODO MUNDO?\n\nAs compras já feitas continuam no histórico, mas deixam de contar: cada pessoa volta a poder comprar até 4 itens (ou o limite individual dela) a partir de agora.')) return;
+  await postContagemLimite('zerar', 'Contagem zerada — segunda rodada aberta. ✓');
+}
+async function restaurarContagemLimite(){
+  if(!confirm('Voltar a contar todas as compras no limite? Quem já comprou 4 itens no total volta a ficar sem saldo.')) return;
+  await postContagemLimite('restaurar', 'Voltou a contar todas as compras. ✓');
+}
+async function postContagemLimite(acao, okMsg){
+  try{
+    const res = await fetch('/api/usuarios?recurso=limite', {
+      method:'POST', headers: adminHeaders({'Content-Type':'application/json'}), body: JSON.stringify({ acao })
+    });
+    const d = await res.json();
+    if(!res.ok) throw new Error(d.error || 'Falha na operação.');
+    showToast(okMsg);
+    await carregarContagemLimite();
+  }catch(err){ showToast(err.message || 'Falha na operação.'); }
+}
 
 async function carregarAutorizados(){
   const res = await fetch('/api/usuarios?recurso=autorizados', { headers: adminHeaders() });

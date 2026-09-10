@@ -22,6 +22,22 @@ export const config = {
 // 4; a TI pode liberar um limite diferente pra alguém no Painel (Usuários →
 // Limite), que fica em cadastros_acesso.limite_itens.
 const LIMITE_PADRAO = 4;
+
+// "Zerar contagem do limite" (Painel → Usuários): quando config_catalogo.
+// limite_desde está definido, só os chamados abertos a partir dessa data
+// contam no limite — as compras anteriores ficam no histórico, mas liberam
+// uma nova cota (segunda rodada).
+async function limiteDesde(supabase) {
+  const { data, error } = await supabase
+    .from('config_catalogo')
+    .select('valor')
+    .eq('chave', 'limite_desde')
+    .maybeSingle();
+  if (error) throw error;
+  const v = data && data.valor ? new Date(data.valor) : null;
+  return v && !isNaN(v.getTime()) ? v : null;
+}
+
 async function limiteParaCpf(supabase, cpf) {
   const limpo = String(cpf || '').replace(/\D/g, '');
   if (limpo.length !== 11) return LIMITE_PADRAO;
@@ -46,13 +62,15 @@ export default async function handler(req, res) {
       const saldoCpf = String(req.query.saldoCpf || '').replace(/\D/g, '');
       if (saldoCpf) {
         const LIMITE = await limiteParaCpf(supabase, saldoCpf);
+        const desde = await limiteDesde(supabase);
         const { data: chamadosPessoa, error: cpErr } = await supabase
           .from('chamados')
-          .select('protocolo, matricula, status');
+          .select('protocolo, matricula, status, data_abertura');
         if (cpErr) throw cpErr;
         const protocolosPessoa = (chamadosPessoa || [])
           .filter((c) => String(c.matricula || '').replace(/\D/g, '') === saldoCpf)
           .filter((c) => !['Cancelado', 'Reprovado pelo DP'].includes(c.status))
+          .filter((c) => !desde || new Date(c.data_abertura) >= desde)
           .map((c) => c.protocolo);
         let usados = 0;
         if (protocolosPessoa.length) {
@@ -209,13 +227,15 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: `Limite: no máximo ${LIMITE_POR_PESSOA} itens por pessoa.` });
       }
 
+      const desde = await limiteDesde(supabase);
       const { data: chamadosPessoa, error: cpErr } = await supabase
         .from('chamados')
-        .select('protocolo, matricula, status');
+        .select('protocolo, matricula, status, data_abertura');
       if (cpErr) throw cpErr;
       const protocolosPessoa = (chamadosPessoa || [])
         .filter((c) => String(c.matricula || '').replace(/\D/g, '') === cpfLimpo)
         .filter((c) => !['Cancelado', 'Reprovado pelo DP'].includes(c.status))
+        .filter((c) => !desde || new Date(c.data_abertura) >= desde)
         .map((c) => c.protocolo);
 
       let qtdExistente = 0;

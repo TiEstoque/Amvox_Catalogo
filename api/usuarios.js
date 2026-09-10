@@ -1,6 +1,7 @@
 // api/usuarios.js
 // Gestão dos usuários cadastrados (Painel Administrativo — exige login de admin).
 // GET    /api/usuarios              -> lista os cadastros (com autorizado = CPF está na lista de colaboradores)
+// GET/POST /api/usuarios?recurso=limite -> contagem do limite por pessoa (zerar = segunda rodada / restaurar)
 // ...    /api/usuarios?recurso=autorizados -> gestão da lista de CPFs autorizados (GET lista, POST cola CPFs,
 //                                             PATCH {cpf, ativo}, DELETE &cpf=...) — código em _autorizados.js
 // PATCH  /api/usuarios              -> { cpf, acao: 'senha'|'bloquear'|'desbloquear'|'limite', novaSenha?, limite? }
@@ -26,6 +27,34 @@ export default async function handler(req, res) {
     // Lista de colaboradores autorizados (GET/POST/PATCH/DELETE) — ver _autorizados.js
     if (String(req.query.recurso || '') === 'autorizados') {
       return handleAutorizados(req, res, supabase);
+    }
+
+    // Contagem do limite por pessoa (config_catalogo.limite_desde):
+    // GET  ?recurso=limite                      -> { limiteDesde }
+    // POST ?recurso=limite { acao: 'zerar' }    -> só compras a partir de agora contam (segunda rodada)
+    // POST ?recurso=limite { acao: 'restaurar' }-> volta a contar todas as compras
+    if (String(req.query.recurso || '') === 'limite') {
+      if (req.method === 'GET') {
+        const { data, error } = await supabase
+          .from('config_catalogo')
+          .select('valor, atualizado_em')
+          .eq('chave', 'limite_desde')
+          .maybeSingle();
+        if (error) throw error;
+        return res.status(200).json({ limiteDesde: data && data.valor ? data.valor : null });
+      }
+      if (req.method === 'POST') {
+        const acao = String(parseBody(req).acao || '');
+        if (acao !== 'zerar' && acao !== 'restaurar') return res.status(400).json({ error: 'Ação inválida.' });
+        const valor = acao === 'zerar' ? new Date().toISOString() : null;
+        const { error } = await supabase
+          .from('config_catalogo')
+          .upsert({ chave: 'limite_desde', valor, atualizado_em: new Date().toISOString(), atualizado_por: 'Painel' }, { onConflict: 'chave' });
+        if (error) throw error;
+        return res.status(200).json({ ok: true, limiteDesde: valor });
+      }
+      res.setHeader('Allow', 'GET, POST');
+      return res.status(405).json({ error: 'Método não permitido.' });
     }
 
     if (req.method === 'GET') {
