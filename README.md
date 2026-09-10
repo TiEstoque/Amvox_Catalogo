@@ -102,6 +102,15 @@ Se precisar reativar um item, basta rodar no SQL Editor do Supabase:
 update items set ativo = true where id = 'ID_DO_ITEM';
 ```
 
+## Janela de compras
+
+As reservas só são aceitas **todos os dias das 07:08 às 17:08** (horário da
+Bahia). A trava fica no `POST /api/reservas` (com 20 min de tolerância no
+fim, pra quem está no cronômetro do Pix); o `index.html` mostra a faixa
+verde/escura no topo e bloqueia o botão Finalizar fora do horário. Pra mudar
+o horário, ajuste `JANELA_INICIO_MIN`/`JANELA_FIM_MIN` em
+`api/reservas/index.js` e `JANELA_COMPRAS` no `index.html`.
+
 ## Lista de colaboradores autorizados (Painel Administrativo → Usuários)
 
 A tabela `colaboradores_autorizados` guarda os CPFs que podem usar o catálogo:
