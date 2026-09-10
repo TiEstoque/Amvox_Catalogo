@@ -321,7 +321,7 @@
     <div class="info-strip">
       <div class="info-item">
         <div class="info-icon">🛒</div>
-        <div><h3>Até 4 itens por pessoa</h3><p>Escolha seus itens (máximo de <b>4 por pessoa</b>, somando reservas e compras anteriores<span id="limitesCatTexto"></span>) e finalize numa reserva só. Depois, não esqueça de abrir o chamado no Gestão.</p></div>
+        <div><h3>Até 6 itens por pessoa</h3><p>Escolha seus itens (máximo de <b>6 por pessoa</b>, somando reservas e compras anteriores<span id="limitesCatTexto"></span>) e finalize numa reserva só. Depois, não esqueça de abrir o chamado no Gestão.</p></div>
       </div>
       <div class="info-item">
         <div class="info-icon">🔒</div>
@@ -463,14 +463,14 @@
 
         <div class="form-card" id="limiteCard">
           <h2>Limite de itens por pessoa <span id="limiteResumo" style="font-size:12.5px;font-weight:600;color:var(--ink-soft);"></span></h2>
-          <p id="limiteTexto">Cada pessoa pode comprar até 4 itens (ou o limite individual liberado no botão "Limite" de cada usuário), somando reservas e compras. Carregando...</p>
+          <p id="limiteTexto">Cada pessoa pode comprar até 6 itens (ou o limite individual liberado no botão "Limite" de cada usuário), somando reservas e compras. Carregando...</p>
           <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
             <button class="btn btn-primary btn-sm" id="limiteBtnZerar" onclick="zerarContagemLimite()">🔄 Zerar contagem (segunda rodada)</button>
             <button class="btn btn-outline btn-sm hidden" id="limiteBtnRestaurar" onclick="restaurarContagemLimite()">Voltar a contar todas as compras</button>
           </div>
           <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--line);">
             <div style="font-size:13px;font-weight:700;margin-bottom:4px;">Máximo por categoria (por pessoa)</div>
-            <p style="color:var(--ink-soft);font-size:12.8px;margin:0 0 10px;">Vale dentro dos 4 itens: ex. 1 computador e 2 monitores. Em branco = sem limite naquela categoria. O catálogo, o carrinho e a reserva passam a respeitar na hora.</p>
+            <p style="color:var(--ink-soft);font-size:12.8px;margin:0 0 10px;">Vale dentro dos 6 itens: ex. 1 computador e 2 monitores. Em branco = sem limite naquela categoria. O catálogo, o carrinho e a reserva passam a respeitar na hora.</p>
             <div id="limitesCatForm" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px;"></div>
             <button class="btn btn-outline btn-sm" id="limitesCatBtn" onclick="salvarLimitesCategoria()">Salvar máximos por categoria</button>
             <span id="limitesCatMsg" style="font-size:12.5px;color:var(--ink-soft);margin-left:8px;"></span>
@@ -868,10 +868,10 @@ document.getElementById('searchInput').addEventListener('input', e=>{ searchTerm
 
 function cartQty(itemId){ const l = cart.find(c=>c.itemId===itemId); return l ? l.quantidade : 0; }
 // Quantos itens a pessoa pode colocar no carrinho: começa no padrão do
-// catálogo (4 por pessoa) e, depois que ela entra, vira o saldo real dela
+// catálogo (6 por pessoa) e, depois que ela entra, vira o saldo real dela
 // (limite por pessoa menos reservas/compras anteriores). A TI pode liberar um
 // limite maior pra alguém no Painel (Usuários → Limite).
-let LIMITE_POR_RESERVA = 4;
+let LIMITE_POR_RESERVA = 6;
 // Sublimites por categoria (ex.: {Computadores:1, Monitores:2}) e quanto a
 // pessoa já usou de cada uma (reservas + compras). Vêm do servidor.
 let limitesCategoria = {};
@@ -2107,7 +2107,7 @@ function modeloPromocao(){
     '',
     'Como funciona:',
     '1. Acesse o catálogo, entre com seu cadastro (ou faça o cadastro na hora) e escolha o monitor. Cada item mostra o modelo, as entradas (VGA, HDMI, DVI) e a condição.',
-    '2. Limite de 4 itens por pessoa, somando reservas e compras anteriores.',
+    '2. Limite de 6 itens por pessoa, somando reservas e compras anteriores.',
     '3. O pagamento é por Pix na hora da reserva: pague, anexe o comprovante e a Nota de Débito sai na hora.',
     '4. Depois, abra o chamado no Gestão. O Fiscal libera em até 72h e a TI avisa por e-mail o horário da retirada.',
     '',
@@ -2141,7 +2141,7 @@ function modeloSemCompra(){
     '',
     ...(linhas.length ? linhas : ['• Monitores, computadores, SSDs e periféricos com preços a partir de R$ 25']),
     '',
-    `São equipamentos usados, da própria Amvox, e a condição de cada um está descrita no catálogo. Cada colaborador pode comprar até 4 itens${descreverLimitesCat(limitesCategoria) ? ` (no máximo ${descreverLimitesCat(limitesCategoria)})` : ''}.`,
+    `São equipamentos usados, da própria Amvox, e a condição de cada um está descrita no catálogo. Cada colaborador pode comprar até 6 itens${descreverLimitesCat(limitesCategoria) ? ` (no máximo ${descreverLimitesCat(limitesCategoria)})` : ''}.`,
     '',
     'Como funciona:',
     `1. Acesse o catálogo (compras todos os dias das ${JANELA_COMPRAS.inicio} às ${JANELA_COMPRAS.fim}), entre com seu cadastro e escolha os itens.`,
@@ -2676,8 +2676,8 @@ async function carregarContagemLimite(){
     document.getElementById('limiteBtnRestaurar').classList.toggle('hidden', !desde);
     document.getElementById('limiteResumo').textContent = desde ? `· contando desde ${desde.toLocaleString('pt-BR')}` : '· contando todas as compras';
     txt.innerHTML = desde
-      ? `Cada pessoa pode comprar até 4 itens (ou o limite individual liberado no botão "Limite"). <b>Segunda rodada ativa:</b> só as reservas e compras feitas a partir de <b>${desde.toLocaleString('pt-BR')}</b> contam no limite — as anteriores ficam no histórico, mas não descontam.`
-      : `Cada pessoa pode comprar até 4 itens (ou o limite individual liberado no botão "Limite"), somando <b>todas</b> as reservas e compras. "Zerar contagem" abre uma segunda rodada: as compras já feitas deixam de contar e todo mundo volta a ter a cota inteira.`;
+      ? `Cada pessoa pode comprar até 6 itens (ou o limite individual liberado no botão "Limite"). <b>Segunda rodada ativa:</b> só as reservas e compras feitas a partir de <b>${desde.toLocaleString('pt-BR')}</b> contam no limite — as anteriores ficam no histórico, mas não descontam.`
+      : `Cada pessoa pode comprar até 6 itens (ou o limite individual liberado no botão "Limite"), somando <b>todas</b> as reservas e compras. "Zerar contagem" abre uma segunda rodada: as compras já feitas deixam de contar e todo mundo volta a ter a cota inteira.`;
   }catch(err){
     txt.innerHTML = `<span style="color:var(--danger);font-weight:600;">${esc(err.message)}</span>`;
   }
@@ -2714,11 +2714,11 @@ async function salvarLimitesCategoria(){
 }
 
 async function zerarContagemLimite(){
-  if(!confirm('Zerar a contagem do limite pra TODO MUNDO?\n\nAs compras já feitas continuam no histórico, mas deixam de contar: cada pessoa volta a poder comprar até 4 itens (ou o limite individual dela) a partir de agora.')) return;
+  if(!confirm('Zerar a contagem do limite pra TODO MUNDO?\n\nAs compras já feitas continuam no histórico, mas deixam de contar: cada pessoa volta a poder comprar até 6 itens (ou o limite individual dela) a partir de agora.')) return;
   await postContagemLimite('zerar', 'Contagem zerada — segunda rodada aberta. ✓');
 }
 async function restaurarContagemLimite(){
-  if(!confirm('Voltar a contar todas as compras no limite? Quem já comprou 4 itens no total volta a ficar sem saldo.')) return;
+  if(!confirm('Voltar a contar todas as compras no limite? Quem já comprou 6 itens no total volta a ficar sem saldo.')) return;
   await postContagemLimite('restaurar', 'Voltou a contar todas as compras. ✓');
 }
 async function postContagemLimite(acao, okMsg){
@@ -2862,11 +2862,11 @@ function novaSenhaUsuario(cpf, nome){
 }
 
 function definirLimiteUsuario(cpf, nome, atual){
-  const v = prompt(`Limite de itens para ${nome} (somando reservas e compras).\nPadrão do catálogo: 4. Deixe em branco pra voltar ao padrão.`, atual === null ? '' : String(atual));
+  const v = prompt(`Limite de itens para ${nome} (somando reservas e compras).\nPadrão do catálogo: 6. Deixe em branco pra voltar ao padrão.`, atual === null ? '' : String(atual));
   if(v === null) return;
   const limpo = v.trim();
   if(limpo !== '' && !/^\d{1,2}$/.test(limpo)){ showToast('Digite um número de 0 a 50, ou deixe em branco.'); return; }
-  patchUsuario({ cpf, acao: 'limite', limite: limpo === '' ? null : parseInt(limpo, 10) }, limpo === '' ? 'Limite voltou ao padrão (4). ✓' : `Limite de ${limpo} itens liberado. ✓`);
+  patchUsuario({ cpf, acao: 'limite', limite: limpo === '' ? null : parseInt(limpo, 10) }, limpo === '' ? 'Limite voltou ao padrão (6). ✓' : `Limite de ${limpo} itens liberado. ✓`);
 }
 
 function alternarBloqueio(cpf, bloquear, nome){

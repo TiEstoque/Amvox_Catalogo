@@ -113,7 +113,7 @@ o horário, ajuste `JANELA_INICIO_MIN`/`JANELA_FIM_MIN` em
 
 ## Limite de itens e "segunda rodada"
 
-Cada pessoa pode comprar até 4 itens somando reservas e compras (limite
+Cada pessoa pode comprar até 6 itens somando reservas e compras (limite
 individual: botão **Limite** no usuário, coluna `cadastros_acesso.limite_itens`).
 O card **Limite de itens por pessoa** (Painel → Usuários) tem o botão **Zerar
 contagem (segunda rodada)**: grava a data/hora em `config_catalogo.limite_desde`
@@ -122,7 +122,7 @@ histórico não muda, mas todo mundo volta a ter a cota inteira. "Voltar a conta
 todas as compras" desfaz.
 
 No mesmo card ficam os **máximos por categoria** (config `limites_categoria`,
-JSON como `{"Computadores":1,"Monitores":2}`): valem dentro dos 4 itens e são
+JSON como `{"Computadores":1,"Monitores":2}`): valem dentro dos 6 itens e são
 conferidos no carrinho, no modal de reserva (`GET /api/reservas?saldoCpf=`
 devolve `porCategoria`) e na trava do servidor (`POST /api/reservas`). Em
 branco = sem máximo naquela categoria. `GET /api/reservas?limites=1` expõe as

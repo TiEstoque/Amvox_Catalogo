@@ -21,7 +21,7 @@ export const config = {
 // Limite de itens por pessoa (somando reservas ativas e compras). O padrão é
 // 4; a TI pode liberar um limite diferente pra alguém no Painel (Usuários →
 // Limite), que fica em cadastros_acesso.limite_itens.
-const LIMITE_PADRAO = 4;
+const LIMITE_PADRAO = 6;
 
 // "Zerar contagem do limite" (Painel → Usuários): quando config_catalogo.
 // limite_desde está definido, só os chamados abertos a partir dessa data
