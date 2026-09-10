@@ -33,18 +33,45 @@ export default async function handler(req, res) {
     // GET  ?recurso=limite                      -> { limiteDesde }
     // POST ?recurso=limite { acao: 'zerar' }    -> só compras a partir de agora contam (segunda rodada)
     // POST ?recurso=limite { acao: 'restaurar' }-> volta a contar todas as compras
+    // POST ?recurso=limite { acao: 'categorias', limites: {cat: n} } -> sublimites por categoria
     if (String(req.query.recurso || '') === 'limite') {
       if (req.method === 'GET') {
         const { data, error } = await supabase
           .from('config_catalogo')
-          .select('valor, atualizado_em')
-          .eq('chave', 'limite_desde')
-          .maybeSingle();
+          .select('chave, valor')
+          .in('chave', ['limite_desde', 'limites_categoria']);
         if (error) throw error;
-        return res.status(200).json({ limiteDesde: data && data.valor ? data.valor : null });
+        const cfg = Object.fromEntries((data || []).map((r) => [r.chave, r.valor]));
+        let limitesCategoria = {};
+        try { limitesCategoria = cfg.limites_categoria ? JSON.parse(cfg.limites_categoria) : {}; } catch { limitesCategoria = {}; }
+        return res.status(200).json({ limiteDesde: cfg.limite_desde || null, limitesCategoria });
       }
       if (req.method === 'POST') {
-        const acao = String(parseBody(req).acao || '');
+        const body = parseBody(req);
+        const acao = String(body.acao || '');
+
+        // { acao: 'categorias', limites: { Computadores: 1, Monitores: 2 } } -> sublimites por categoria
+        // (número vazio/null remove o sublimite da categoria)
+        if (acao === 'categorias') {
+          const entrada = body.limites && typeof body.limites === 'object' ? body.limites : {};
+          const limites = {};
+          for (const [cat, v] of Object.entries(entrada)) {
+            const nome = String(cat || '').trim();
+            if (!nome) continue;
+            if (v === null || v === undefined || String(v).trim() === '') continue;
+            const n = parseInt(String(v).trim(), 10);
+            if (!Number.isInteger(n) || n < 0 || n > 50) {
+              return res.status(400).json({ error: `Limite inválido para "${nome}": use um número de 0 a 50, ou deixe em branco.` });
+            }
+            limites[nome] = n;
+          }
+          const { error } = await supabase
+            .from('config_catalogo')
+            .upsert({ chave: 'limites_categoria', valor: JSON.stringify(limites), atualizado_em: new Date().toISOString(), atualizado_por: 'Painel' }, { onConflict: 'chave' });
+          if (error) throw error;
+          return res.status(200).json({ ok: true, limitesCategoria: limites });
+        }
+
         if (acao !== 'zerar' && acao !== 'restaurar') return res.status(400).json({ error: 'Ação inválida.' });
         const valor = acao === 'zerar' ? new Date().toISOString() : null;
         const { error } = await supabase

@@ -38,6 +38,39 @@ async function limiteDesde(supabase) {
   return v && !isNaN(v.getTime()) ? v : null;
 }
 
+// Sublimites por categoria (config_catalogo.limites_categoria, JSON como
+// {"Computadores":1,"Monitores":2}): quantos itens de cada categoria a pessoa
+// pode ter somando reservas e compras. Categoria fora do JSON = sem sublimite.
+async function limitesCategoria(supabase) {
+  const { data, error } = await supabase
+    .from('config_catalogo')
+    .select('valor')
+    .eq('chave', 'limites_categoria')
+    .maybeSingle();
+  if (error) throw error;
+  try {
+    const obj = data && data.valor ? JSON.parse(data.valor) : {};
+    const out = {};
+    for (const [cat, v] of Object.entries(obj || {})) {
+      const n = parseInt(v, 10);
+      if (Number.isInteger(n) && n >= 0) out[cat] = n;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+function plural(n, singular, pluralForm) {
+  return `${n} ${n === 1 ? singular : pluralForm}`;
+}
+function nomeCategoria(cat, n) {
+  const c = String(cat).toLowerCase();
+  if (c === 'computadores') return n === 1 ? 'computador' : 'computadores';
+  if (c === 'monitores') return n === 1 ? 'monitor' : 'monitores';
+  return `${n === 1 ? 'item de' : 'itens de'} ${cat}`;
+}
+
 async function limiteParaCpf(supabase, cpf) {
   const limpo = String(cpf || '').replace(/\D/g, '');
   if (limpo.length !== 11) return LIMITE_PADRAO;
@@ -59,10 +92,19 @@ export default async function handler(req, res) {
       // GET /api/reservas?saldoCpf=CPF -> quantos itens a pessoa ainda pode
       // comprar (limite por pessoa). Usado pelo modal de reserva pra evitar
       // que alguém pague o Pix sem ter saldo.
+      // GET /api/reservas?limites=1 -> regras públicas (limite padrão e
+      // sublimites por categoria), usadas pelo carrinho antes do login.
+      if (req.query.limites) {
+        return res.status(200).json({ limitePadrao: LIMITE_PADRAO, porCategoria: await limitesCategoria(supabase) });
+      }
+
       const saldoCpf = String(req.query.saldoCpf || '').replace(/\D/g, '');
       if (saldoCpf) {
-        const LIMITE = await limiteParaCpf(supabase, saldoCpf);
-        const desde = await limiteDesde(supabase);
+        const [LIMITE, desde, limCat] = await Promise.all([
+          limiteParaCpf(supabase, saldoCpf),
+          limiteDesde(supabase),
+          limitesCategoria(supabase),
+        ]);
         const { data: chamadosPessoa, error: cpErr } = await supabase
           .from('chamados')
           .select('protocolo, matricula, status, data_abertura');
@@ -73,15 +115,23 @@ export default async function handler(req, res) {
           .filter((c) => !desde || new Date(c.data_abertura) >= desde)
           .map((c) => c.protocolo);
         let usados = 0;
+        const usadosCat = {};
         if (protocolosPessoa.length) {
           const { data: itensPessoa, error: ipErr } = await supabase
             .from('chamado_itens')
-            .select('quantidade')
+            .select('quantidade, categoria')
             .in('chamado_protocolo', protocolosPessoa);
           if (ipErr) throw ipErr;
-          usados = (itensPessoa || []).reduce((a, it) => a + it.quantidade, 0);
+          for (const it of itensPessoa || []) {
+            usados += it.quantidade;
+            usadosCat[it.categoria] = (usadosCat[it.categoria] || 0) + it.quantidade;
+          }
         }
-        return res.status(200).json({ limite: LIMITE, usados, disponivel: Math.max(0, LIMITE - usados) });
+        const porCategoria = {};
+        for (const [cat, lim] of Object.entries(limCat)) {
+          porCategoria[cat] = { limite: lim, usados: usadosCat[cat] || 0, disponivel: Math.max(0, lim - (usadosCat[cat] || 0)) };
+        }
+        return res.status(200).json({ limite: LIMITE, usados, disponivel: Math.max(0, LIMITE - usados), porCategoria });
       }
 
       const q = String(req.query.q || '').trim();
@@ -239,19 +289,40 @@ export default async function handler(req, res) {
         .map((c) => c.protocolo);
 
       let qtdExistente = 0;
+      const existenteCat = {};
       if (protocolosPessoa.length) {
         const { data: itensPessoa, error: ipErr } = await supabase
           .from('chamado_itens')
-          .select('quantidade')
+          .select('quantidade, categoria')
           .in('chamado_protocolo', protocolosPessoa);
         if (ipErr) throw ipErr;
-        qtdExistente = (itensPessoa || []).reduce((a, it) => a + it.quantidade, 0);
+        for (const it of itensPessoa || []) {
+          qtdExistente += it.quantidade;
+          existenteCat[it.categoria] = (existenteCat[it.categoria] || 0) + it.quantidade;
+        }
       }
 
       if (qtdExistente + qtdNova > LIMITE_POR_PESSOA) {
         return res.status(400).json({
           error: `Limite de ${LIMITE_POR_PESSOA} itens por pessoa: você já tem ${qtdExistente} entre reservas e compras. Dúvidas? Procure a TI.`,
         });
+      }
+
+      // Sublimites por categoria (ex.: 1 computador e 2 monitores por pessoa),
+      // pra que os itens mais disputados alcancem mais colegas.
+      const limCat = await limitesCategoria(supabase);
+      const novaCat = {};
+      for (const l of linhas) novaCat[l.item.categoria] = (novaCat[l.item.categoria] || 0) + l.qty;
+      for (const [cat, lim] of Object.entries(limCat)) {
+        const nova = novaCat[cat] || 0;
+        if (!nova) continue;
+        const existente = existenteCat[cat] || 0;
+        if (existente + nova > lim) {
+          const jaTem = existente ? ` Você já tem ${plural(existente, nomeCategoria(cat, 1), nomeCategoria(cat, 2))} entre reservas e compras.` : '';
+          return res.status(400).json({
+            error: `Limite de ${plural(lim, nomeCategoria(cat, 1), nomeCategoria(cat, 2))} por pessoa, pra que mais colegas consigam comprar.${jaTem} Ajuste o carrinho e tente de novo.`,
+          });
+        }
       }
 
       const parcelasNum = null;

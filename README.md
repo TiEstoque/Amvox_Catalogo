@@ -121,6 +121,13 @@ e, a partir daí, só os chamados abertos depois dessa data contam no limite —
 histórico não muda, mas todo mundo volta a ter a cota inteira. "Voltar a contar
 todas as compras" desfaz.
 
+No mesmo card ficam os **máximos por categoria** (config `limites_categoria`,
+JSON como `{"Computadores":1,"Monitores":2}`): valem dentro dos 4 itens e são
+conferidos no carrinho, no modal de reserva (`GET /api/reservas?saldoCpf=`
+devolve `porCategoria`) e na trava do servidor (`POST /api/reservas`). Em
+branco = sem máximo naquela categoria. `GET /api/reservas?limites=1` expõe as
+regras públicas pro catálogo.
+
 ## Lista de colaboradores autorizados (Painel Administrativo → Usuários)
 
 A tabela `colaboradores_autorizados` guarda os CPFs que podem usar o catálogo:

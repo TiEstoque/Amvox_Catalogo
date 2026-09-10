@@ -321,7 +321,7 @@
     <div class="info-strip">
       <div class="info-item">
         <div class="info-icon">🛒</div>
-        <div><h3>Até 4 itens por pessoa</h3><p>Escolha seus itens (máximo de <b>4 por pessoa</b>, somando reservas e compras anteriores) e finalize numa reserva só. Depois, não esqueça de abrir o chamado no Gestão.</p></div>
+        <div><h3>Até 4 itens por pessoa</h3><p>Escolha seus itens (máximo de <b>4 por pessoa</b>, somando reservas e compras anteriores<span id="limitesCatTexto"></span>) e finalize numa reserva só. Depois, não esqueça de abrir o chamado no Gestão.</p></div>
       </div>
       <div class="info-item">
         <div class="info-icon">🔒</div>
@@ -467,6 +467,13 @@
           <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
             <button class="btn btn-primary btn-sm" id="limiteBtnZerar" onclick="zerarContagemLimite()">🔄 Zerar contagem (segunda rodada)</button>
             <button class="btn btn-outline btn-sm hidden" id="limiteBtnRestaurar" onclick="restaurarContagemLimite()">Voltar a contar todas as compras</button>
+          </div>
+          <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--line);">
+            <div style="font-size:13px;font-weight:700;margin-bottom:4px;">Máximo por categoria (por pessoa)</div>
+            <p style="color:var(--ink-soft);font-size:12.8px;margin:0 0 10px;">Vale dentro dos 4 itens: ex. 1 computador e 2 monitores. Em branco = sem limite naquela categoria. O catálogo, o carrinho e a reserva passam a respeitar na hora.</p>
+            <div id="limitesCatForm" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px;"></div>
+            <button class="btn btn-outline btn-sm" id="limitesCatBtn" onclick="salvarLimitesCategoria()">Salvar máximos por categoria</button>
+            <span id="limitesCatMsg" style="font-size:12.5px;color:var(--ink-soft);margin-left:8px;"></span>
           </div>
         </div>
 
@@ -865,7 +872,36 @@ function cartQty(itemId){ const l = cart.find(c=>c.itemId===itemId); return l ? 
 // (limite por pessoa menos reservas/compras anteriores). A TI pode liberar um
 // limite maior pra alguém no Painel (Usuários → Limite).
 let LIMITE_POR_RESERVA = 4;
+// Sublimites por categoria (ex.: {Computadores:1, Monitores:2}) e quanto a
+// pessoa já usou de cada uma (reservas + compras). Vêm do servidor.
+let limitesCategoria = {};
+let usadosCategoria = {};
+
+function nomeCategoriaFront(cat, n){
+  const c = String(cat).toLowerCase();
+  if(c === 'computadores') return n === 1 ? 'computador' : 'computadores';
+  if(c === 'monitores') return n === 1 ? 'monitor' : 'monitores';
+  return `${n === 1 ? 'item de' : 'itens de'} ${cat}`;
+}
+// "1 computador e 2 monitores"
+function descreverLimitesCat(lim){
+  const partes = Object.entries(lim || {}).map(([cat, n]) => `${n} ${nomeCategoriaFront(cat, n)}`);
+  if(!partes.length) return '';
+  return partes.length === 1 ? partes[0] : partes.slice(0, -1).join(', ') + ' e ' + partes[partes.length - 1];
+}
+function atualizarTextoLimites(){
+  const el = document.getElementById('limitesCatTexto');
+  if(!el) return;
+  const txt = descreverLimitesCat(limitesCategoria);
+  el.innerHTML = txt ? `; no máximo <b>${esc(txt)}</b>` : '';
+}
+
 async function atualizarLimiteReserva(){
+  try{
+    const resL = await fetch('/api/reservas?limites=1');
+    if(resL.ok){ const l = await resL.json(); limitesCategoria = l.porCategoria || {}; }
+  }catch(err){ console.error('Erro ao consultar os limites', err); }
+  atualizarTextoLimites();
   try{
     const gateData = JSON.parse(sessionStorage.getItem('amvox_gate_data') || 'null');
     const cpf = String(gateData && gateData.cpf || '').replace(/\D/g,'');
@@ -874,8 +910,14 @@ async function atualizarLimiteReserva(){
     const d = await res.json();
     if(!res.ok) return;
     LIMITE_POR_RESERVA = Math.max(0, Number(d.disponivel) || 0);
+    usadosCategoria = {};
+    Object.entries(d.porCategoria || {}).forEach(([cat, v]) => { limitesCategoria[cat] = v.limite; usadosCategoria[cat] = v.usados || 0; });
+    atualizarTextoLimites();
     if(typeof renderGrid === 'function' && effectiveCatalog.length){ renderGrid(); renderCartBar(); }
   }catch(err){ console.error('Erro ao consultar o saldo de itens', err); }
+}
+function qtdCarrinhoCategoria(cat){
+  return cart.reduce((a,c)=>{ const it = effectiveCatalog.find(i=>i.id===c.itemId); return a + (it && it.categoria === cat ? c.quantidade : 0); }, 0);
 }
 function maxQtyFor(item){ return Math.min(item.isStock ? item.availableQty : (item.disponivel ? 1 : 0), LIMITE_POR_RESERVA); }
 
@@ -887,6 +929,14 @@ function changeCartQty(itemId, delta){
       ? `Você pode reservar no máximo ${LIMITE_POR_RESERVA} ${LIMITE_POR_RESERVA===1?'item':'itens'} (limite por pessoa, somando compras anteriores).`
       : 'Você já usou o seu limite de itens. Dúvidas? Procure a TI.');
     return;
+  }
+  if(delta > 0 && limitesCategoria[item.categoria] !== undefined){
+    const cap = limitesCategoria[item.categoria];
+    const usados = usadosCategoria[item.categoria] || 0;
+    if(usados + qtdCarrinhoCategoria(item.categoria) >= cap){
+      showToast(`Limite de ${cap} ${nomeCategoriaFront(item.categoria, cap)} por pessoa${usados ? ` (você já tem ${usados})` : ''} — assim mais colegas conseguem comprar.`);
+      return;
+    }
   }
   let line = cart.find(c=>c.itemId===itemId);
   let qty = (line ? line.quantidade : 0) + delta;
@@ -1153,10 +1203,16 @@ async function verificarSaldo(){
     const res = await fetch('/api/reservas?saldoCpf=' + encodeURIComponent(cpf));
     const d = await res.json();
     if(!res.ok) throw new Error(d.error || 'Falha ao verificar o saldo.');
+    const estouro = Object.entries(d.porCategoria || {}).find(([cat, v]) => qtdCarrinhoCategoria(cat) > v.disponivel);
     if(d.disponivel <= 0){
       saldoDisponivel = 0;
       box.className = 'sim-box sim-warn';
       box.innerHTML = `🚫 <b>Você já usou o limite de ${d.limite} itens</b> (somando reservas e compras). Não é possível reservar. Dúvidas? Procure a TI.`;
+    } else if(estouro){
+      const [cat, v] = estouro;
+      saldoDisponivel = 0;
+      box.className = 'sim-box sim-warn';
+      box.innerHTML = `⚠️ <b>Limite de ${v.limite} ${nomeCategoriaFront(cat, v.limite)} por pessoa</b>${v.usados ? ` (você já tem ${v.usados})` : ''} — assim mais colegas conseguem comprar. Esta reserva tem ${qtdCarrinhoCategoria(cat)}. <b>Ajuste o carrinho para continuar.</b>`;
     } else if(qtd > d.disponivel){
       saldoDisponivel = d.disponivel;
       box.className = 'sim-box sim-warn';
@@ -2085,7 +2141,7 @@ function modeloSemCompra(){
     '',
     ...(linhas.length ? linhas : ['• Monitores, computadores, SSDs e periféricos com preços a partir de R$ 25']),
     '',
-    'São equipamentos usados, da própria Amvox, e a condição de cada um está descrita no catálogo. Cada colaborador pode comprar até 4 itens.',
+    `São equipamentos usados, da própria Amvox, e a condição de cada um está descrita no catálogo. Cada colaborador pode comprar até 4 itens${descreverLimitesCat(limitesCategoria) ? ` (no máximo ${descreverLimitesCat(limitesCategoria)})` : ''}.`,
     '',
     'Como funciona:',
     `1. Acesse o catálogo (compras todos os dias das ${JANELA_COMPRAS.inicio} às ${JANELA_COMPRAS.fim}), entre com seu cadastro e escolha os itens.`,
@@ -2616,6 +2672,7 @@ async function carregarContagemLimite(){
     const d = await res.json();
     if(!res.ok) throw new Error(d.error || 'Falha ao consultar a contagem do limite.');
     const desde = d.limiteDesde ? new Date(d.limiteDesde) : null;
+    desenharLimitesCategoria(d.limitesCategoria || {});
     document.getElementById('limiteBtnRestaurar').classList.toggle('hidden', !desde);
     document.getElementById('limiteResumo').textContent = desde ? `· contando desde ${desde.toLocaleString('pt-BR')}` : '· contando todas as compras';
     txt.innerHTML = desde
@@ -2624,6 +2681,36 @@ async function carregarContagemLimite(){
   }catch(err){
     txt.innerHTML = `<span style="color:var(--danger);font-weight:600;">${esc(err.message)}</span>`;
   }
+}
+
+function desenharLimitesCategoria(lim){
+  const wrap = document.getElementById('limitesCatForm');
+  if(!wrap) return;
+  const cats = [...new Set([...Object.keys(lim), ...effectiveCatalog.filter(i => i.categoria).map(i => i.categoria)])].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+  wrap.innerHTML = cats.map(cat => `
+    <label style="font-size:12.5px;font-weight:600;color:var(--ink-soft);display:flex;flex-direction:column;gap:4px;">
+      ${esc(cat)}
+      <input type="number" min="0" max="50" step="1" data-cat="${esc(cat)}" value="${lim[cat] !== undefined ? lim[cat] : ''}" placeholder="sem limite" style="width:110px;border:1px solid var(--line);border-radius:9px;padding:8px 10px;font-family:'IBM Plex Sans';font-size:13px;">
+    </label>`).join('') || '<span style="font-size:12.5px;color:var(--ink-soft);">Nenhuma categoria no catálogo ainda.</span>';
+}
+
+async function salvarLimitesCategoria(){
+  const limites = {};
+  document.querySelectorAll('#limitesCatForm input[data-cat]').forEach(inp => { limites[inp.dataset.cat] = inp.value.trim(); });
+  const btn = document.getElementById('limitesCatBtn'); const msg = document.getElementById('limitesCatMsg');
+  btn.disabled = true; msg.textContent = 'Salvando...';
+  try{
+    const res = await fetch('/api/usuarios?recurso=limite', {
+      method:'POST', headers: adminHeaders({'Content-Type':'application/json'}), body: JSON.stringify({ acao: 'categorias', limites })
+    });
+    const d = await res.json();
+    if(!res.ok) throw new Error(d.error || 'Falha ao salvar.');
+    limitesCategoria = d.limitesCategoria || {};
+    atualizarTextoLimites();
+    const txt = descreverLimitesCat(limitesCategoria);
+    msg.textContent = txt ? `✓ Salvo: no máximo ${txt} por pessoa.` : '✓ Salvo: sem máximos por categoria.';
+  }catch(err){ msg.textContent = ''; showToast(err.message || 'Falha ao salvar.'); }
+  finally{ btn.disabled = false; }
 }
 
 async function zerarContagemLimite(){
