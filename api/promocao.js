@@ -2,7 +2,7 @@
 // Disparo de e-mail de promoção pra todos os cadastrados do catálogo
 // (Painel Administrativo → aba Promoção). Exige login de admin.
 //
-// GET  /api/promocao
+// GET  /api/promocao?publico=todos|sem_compra
 //      -> { total, destinatarios: [e-mails], emailConfigurado, remetente }
 //         (cadastros não bloqueados e com CPF na lista de colaboradores
 //          autorizados, sem e-mail repetido)
@@ -10,7 +10,7 @@
 // POST /api/promocao { assunto, mensagem, teste: 'email' }
 //      -> envia SÓ um teste pro e-mail informado (vazio = remetente do catálogo)
 //
-// POST /api/promocao { assunto, mensagem, destinatarios: [e-mails] }
+// POST /api/promocao { assunto, mensagem, destinatarios: [e-mails], publico? }
 //      -> envia pro lote informado (máx. LOTE_MAX por chamada). Só aceita
 //         e-mails que estão em cadastros_acesso e não bloqueados — assim a
 //         rota nunca vira um "disparador" pra endereços de fora.
@@ -35,8 +35,10 @@ export default async function handler(req, res) {
     const supabase = getSupabase();
 
     if (req.method === 'GET') {
-      const destinatarios = await listarDestinatarios(supabase);
+      const publico = String(req.query.publico || 'todos');
+      const destinatarios = await listarDestinatarios(supabase, publico);
       return res.status(200).json({
+        publico,
         total: destinatarios.length,
         destinatarios,
         emailConfigurado: emailConfigurado(),
@@ -85,7 +87,8 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: `Envie no máximo ${LOTE_MAX} destinatários por chamada.` });
       }
 
-      const permitidos = new Set(await listarDestinatarios(supabase));
+      const publico = String(body.publico || 'todos');
+      const permitidos = new Set(await listarDestinatarios(supabase, publico));
       const unicos = [...new Set(pedidos)];
       const validos = unicos.filter((e) => permitidos.has(e));
       const ignorados = unicos.filter((e) => !permitidos.has(e));
@@ -117,24 +120,38 @@ export default async function handler(req, res) {
 }
 
 // Cadastros não bloqueados E com CPF na lista de colaboradores autorizados;
-// e-mails em minúsculas e sem repetição.
-async function listarDestinatarios(supabase) {
-  const [{ data, error }, autorizados] = await Promise.all([
+// e-mails em minúsculas e sem repetição. publico = 'todos' ou 'sem_compra'
+// (só quem nunca teve reserva/compra válida — chamados cancelados/reprovados
+// não contam).
+async function listarDestinatarios(supabase, publico = 'todos') {
+  const [{ data, error }, autorizados, compradores] = await Promise.all([
     supabase
       .from('cadastros_acesso')
       .select('email, cpf')
       .eq('bloqueado', false)
       .order('email', { ascending: true }),
     cpfsAutorizados(supabase),
+    publico === 'sem_compra' ? cpfsQueCompraram(supabase) : Promise.resolve(new Set()),
   ]);
   if (error) throw error;
   const vistos = new Set();
   for (const u of data || []) {
     if (!autorizados.has(String(u.cpf))) continue;
+    if (publico === 'sem_compra' && compradores.has(String(u.cpf))) continue;
     const e = String(u.email || '').trim().toLowerCase();
     if (e && EMAIL_RE.test(e)) vistos.add(e);
   }
   return [...vistos];
+}
+
+// CPFs com pelo menos um chamado válido (reserva ou compra).
+async function cpfsQueCompraram(supabase) {
+  const { data, error } = await supabase
+    .from('chamados')
+    .select('matricula, status')
+    .not('status', 'in', '("Cancelado","Reprovado pelo DP")');
+  if (error) throw error;
+  return new Set((data || []).map((c) => String(c.matricula || '').replace(/\D/g, '')).filter(Boolean));
 }
 
 // Texto simples -> versão texto (com o link no fim, se a mensagem não tiver)

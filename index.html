@@ -490,6 +490,18 @@
           <h2>Enviar promoção por e-mail</h2>
           <p id="promoInfo">O e-mail vai pra todos os cadastrados que estão na lista de colaboradores autorizados (bloqueados e quem está fora da lista não recebem). Carregando destinatários...</p>
           <div class="form-grid">
+            <div class="field"><label>Enviar para</label>
+              <select id="promoPublico" onchange="renderPromocao()">
+                <option value="todos">Todos os cadastrados aptos</option>
+                <option value="sem_compra">Só quem ainda não comprou</option>
+              </select>
+            </div>
+            <div class="field span2"><label>Modelo de mensagem</label>
+              <select id="promoModelo" onchange="preencherModeloPromocao(true)">
+                <option value="monitores">Monitores em promoção</option>
+                <option value="sem_compra">Chamada pra quem ainda não comprou (preços a partir de, por categoria)</option>
+              </select>
+            </div>
             <div class="field span3"><label>Assunto</label><input type="text" id="promoAssunto" placeholder="Ex: Monitores em promoção — a partir de R$ 50"></div>
             <div class="field span3"><label>Mensagem (texto simples — o e-mail sai formatado, com o link do catálogo num botão)</label><textarea id="promoMensagem" style="min-height:280px;"></textarea></div>
             <div class="field span2"><label>E-mail pro teste (opcional — em branco manda pro remetente do catálogo)</label><input type="text" id="promoTesteEmail" placeholder="seuemail@amvox.com.br"></div>
@@ -2043,23 +2055,70 @@ function modeloPromocao(){
   ].join('\n');
 }
 
+// Modelo pra quem ainda não comprou: os "a partir de" saem do catálogo
+// carregado (itens disponíveis por categoria), então ficam sempre atuais.
+function modeloSemCompra(){
+  const porCat = {};
+  effectiveCatalog.forEach(i => {
+    const disp = i.isStock ? i.availableQty > 0 : (i.disponivel && i.itemStatus !== 'Vendido' && i.itemStatus !== 'Reservado');
+    if(!disp) return;
+    const c = porCat[i.categoria] = porCat[i.categoria] || { qtd: 0, min: Infinity };
+    c.qtd += i.isStock ? i.availableQty : 1;
+    c.min = Math.min(c.min, Number(i.preco) || Infinity);
+  });
+  const linhas = Object.entries(porCat)
+    .sort((a,b) => b[1].qtd - a[1].qtd)
+    .map(([cat, c]) => `• ${cat}: ${c.qtd} ${c.qtd===1?'disponível':'disponíveis'}, a partir de ${brl(c.min)}`);
+  return [
+    'Olá!',
+    '',
+    'Vimos que você ainda não fez nenhuma reserva no Catálogo de Vendas Internas — e ainda tem bastante coisa boa por lá, com preço bem abaixo do mercado:',
+    '',
+    ...(linhas.length ? linhas : ['• Monitores, computadores, SSDs e periféricos com preços a partir de R$ 25']),
+    '',
+    'São equipamentos usados, da própria Amvox, e a condição de cada um está descrita no catálogo. Cada colaborador pode comprar até 4 itens.',
+    '',
+    'Como funciona:',
+    `1. Acesse o catálogo (compras todos os dias das ${JANELA_COMPRAS.inicio} às ${JANELA_COMPRAS.fim}), entre com seu cadastro e escolha os itens.`,
+    '2. O pagamento é por Pix na hora da reserva: pague, anexe o comprovante e a Nota de Débito sai na hora.',
+    '3. Depois, abra o chamado no Gestão. O Fiscal libera em até 72h e a TI avisa por e-mail o horário da retirada.',
+    '',
+    'Importante: a compra é exclusiva para colaboradores ativos da Amvox e não é permitida a venda para terceiros. Estoque limitado: quem reservar primeiro, leva.',
+    '',
+    'Qualquer dúvida, é só chamar a TI.',
+    '',
+    'Atenciosamente,',
+    'TI Amvox',
+  ].join('\n');
+}
+
 function preencherModeloPromocao(forcar){
   const assunto = document.getElementById('promoAssunto');
   const msg = document.getElementById('promoMensagem');
-  if(forcar || !assunto.value.trim()) assunto.value = 'Monitores em promoção no Catálogo de Vendas Internas — a partir de R$ 50';
-  if(forcar || !msg.value.trim()) msg.value = modeloPromocao();
+  const modelo = (document.getElementById('promoModelo') || {}).value || 'monitores';
+  if(forcar || !assunto.value.trim()){
+    assunto.value = modelo === 'sem_compra'
+      ? 'Ainda não comprou? Equipamentos usados com preços bons no Catálogo de Vendas Internas'
+      : 'Monitores em promoção no Catálogo de Vendas Internas — a partir de R$ 50';
+  }
+  if(forcar || !msg.value.trim()) msg.value = modelo === 'sem_compra' ? modeloSemCompra() : modeloPromocao();
 }
 
+function promoPublico(){ return (document.getElementById('promoPublico') || {}).value || 'todos'; }
+
 async function renderPromocao(){
+  if(!effectiveCatalog.length){ try{ await loadCatalog(); }catch(e){ console.error(e); } }
   preencherModeloPromocao(false);
   const info = document.getElementById('promoInfo');
+  const publico = promoPublico();
   try{
-    const res = await fetch('/api/promocao', { headers: adminHeaders() });
+    const res = await fetch('/api/promocao?publico=' + encodeURIComponent(publico), { headers: adminHeaders() });
     const d = await res.json();
     if(!res.ok) throw new Error(d.error || 'Falha ao carregar os destinatários.');
     promoDestinatarios = d.destinatarios || [];
-    document.getElementById('promoBtnTodos').textContent = `📣 Enviar para todos (${promoDestinatarios.length})`;
-    info.innerHTML = `O e-mail vai pra <b>${promoDestinatarios.length}</b> cadastrado(s) que estão na lista de colaboradores autorizados (bloqueados e quem está fora da lista não recebem), enviado por <b>${esc(d.remetente || 'remetente não configurado')}</b>. Mande um teste antes de disparar pra todos.`
+    const rotulo = publico === 'sem_compra' ? 'que ainda não compraram' : 'aptos';
+    document.getElementById('promoBtnTodos').textContent = `📣 Enviar para ${publico === 'sem_compra' ? 'quem não comprou' : 'todos'} (${promoDestinatarios.length})`;
+    info.innerHTML = `O e-mail vai pra <b>${promoDestinatarios.length}</b> cadastrado(s) ${rotulo} — sempre só quem está na lista de colaboradores autorizados e não está bloqueado${publico === 'sem_compra' ? '; quem já tem reserva ou compra válida fica de fora' : ''}. Remetente: <b>${esc(d.remetente || 'remetente não configurado')}</b>. Mande um teste antes de disparar.`
       + (d.emailConfigurado ? '' : ' <span style="color:var(--danger);font-weight:600;">E-mail não configurado na Vercel — o envio vai falhar.</span>');
   }catch(err){
     promoDestinatarios = null;
@@ -2094,7 +2153,8 @@ async function enviarPromocao(teste){
   }
 
   if(!promoDestinatarios || !promoDestinatarios.length){ alert('Lista de destinatários não carregada. Feche e abra a aba Promoção de novo.'); return; }
-  if(!confirm(`Enviar "${assunto}" para ${promoDestinatarios.length} cadastrado(s)?\n\nDica: mande um teste antes pra ver como ficou.`)) return;
+  const publico = promoPublico();
+  if(!confirm(`Enviar "${assunto}" para ${promoDestinatarios.length} cadastrado(s)${publico === 'sem_compra' ? ' que ainda não compraram' : ''}?\n\nDica: mande um teste antes pra ver como ficou.`)) return;
 
   setBusy(true); prog.classList.remove('hidden');
   const total = promoDestinatarios.length;
@@ -2105,7 +2165,7 @@ async function enviarPromocao(teste){
       prog.textContent = `Enviando ${Math.min(i + lote.length, total)} de ${total}...`;
       const res = await fetch('/api/promocao', {
         method: 'POST', headers: adminHeaders({'Content-Type':'application/json'}),
-        body: JSON.stringify({ assunto, mensagem, destinatarios: lote })
+        body: JSON.stringify({ assunto, mensagem, destinatarios: lote, publico })
       });
       const d = await res.json();
       if(!res.ok) throw new Error(d.error || 'Falha no envio do lote.');
