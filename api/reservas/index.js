@@ -153,7 +153,16 @@ export default async function handler(req, res) {
       const protocolos = chamados.map((c) => c.protocolo);
       let itensPorChamado = {};
       let descricaoPorItemId = {};
+      const ndPorChamado = {};
       if (protocolos.length) {
+        // número da Nota de Débito de cada chamado — o Painel usa pra buscar
+        // uma nota pelo número na aba Vendas
+        const { data: notas } = await supabase
+          .from('notas_debito')
+          .select('numero, chamado_protocolo')
+          .in('chamado_protocolo', protocolos);
+        (notas || []).forEach((n) => { ndPorChamado[n.chamado_protocolo] = n.numero; });
+
         const { data: itens, error: itensErr } = await supabase
           .from('chamado_itens')
           .select('*')
@@ -174,7 +183,9 @@ export default async function handler(req, res) {
         }
       }
 
-      const shaped = chamados.map((c) => shapeChamado(c, itensPorChamado[c.protocolo] || [], descricaoPorItemId));
+      const shaped = chamados.map((c) =>
+        shapeChamado(c, itensPorChamado[c.protocolo] || [], descricaoPorItemId, ndPorChamado[c.protocolo] || null)
+      );
       return res.status(200).json({ chamados: shaped });
     }
 
@@ -471,9 +482,10 @@ function parseBody(req) {
   return req.body || {};
 }
 
-function shapeChamado(c, itens, descricaoPorItemId = {}) {
+function shapeChamado(c, itens, descricaoPorItemId = {}, notaDebito = null) {
   return {
     protocolo: c.protocolo,
+    notaDebito,
     nome: c.nome,
     matricula: c.matricula,
     setor: c.setor,

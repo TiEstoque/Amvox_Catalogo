@@ -547,7 +547,13 @@
           <div class="viz-card"><h2>Vendas por categoria</h2><div id="vizCategorias"></div></div>
           <div class="viz-card"><h2>Itens mais vendidos</h2><div id="vizItensVendidos"></div></div>
         </div>
-        <h2 style="font-size:17px;margin:16px 0 10px;">Vendas concluídas</h2>
+        <div class="panel-head" style="margin-top:20px;">
+          <div>
+            <h2 style="font-size:17px;margin:0;">Vendas concluídas</h2>
+            <p id="vendasCount" style="color:var(--ink-soft);font-size:12.8px;margin:4px 0 0;"></p>
+          </div>
+          <div class="search-box" style="max-width:340px;"><input type="text" id="vendasSearch" placeholder="Buscar por nº da nota, protocolo, nome, CPF, item..."></div>
+        </div>
         <div id="vendasLista"></div>
         <div class="empty hidden" id="vendasVazio"><div class="big">💰</div>Nenhuma venda concluída ainda.</div>
       </div>
@@ -1926,23 +1932,62 @@ async function renderVendas(){
       .map(([nome,v])=>({ nome, valor: v.valor, extra: `${v.qtd} ${v.qtd===1?'unidade':'unidades'}` }))
       .sort((a,b)=>b.valor-a.valor).slice(0,5));
 
-    const orden = vendas.slice().sort((a,b)=>new Date(b.dataAbertura)-new Date(a.dataAbertura));
-    document.getElementById('vendasVazio').classList.toggle('hidden', vendas.length>0);
-    document.getElementById('vendasLista').innerHTML = orden.map(c=>`
-      <div class="ticket">
-        <div class="ticket-top">
-          <div><span class="mono" style="font-size:11.5px;color:var(--ink-soft);">${c.protocolo}</span></div>
-          <div class="val">${brl(c.valorTotal)}</div>
-        </div>
-        <div class="items-list">${c.itens.map(it=>`Nº ${esc(it.numero)} — ${esc(it.titulo)} (${it.quantidade}x)`).join(' · ')}</div>
-        <div class="meta" style="margin-top:4px;">Aberto em ${new Date(c.dataAbertura).toLocaleDateString('pt-BR')} · ${esc(c.setor||'—')}</div>
-      </div>
-    `).join('');
+    vendasList = vendas.slice().sort((a,b)=>new Date(b.dataAbertura)-new Date(a.dataAbertura));
+    desenharVendasLista();
   } catch(err){
     console.error('Erro ao carregar vendas', err);
     showToast(err.message || 'Não foi possível carregar as vendas.');
   }
 }
+/* Busca nas vendas concluídas: nº da Nota de Débito, protocolo, nome, CPF,
+   setor, valor ou item (nº/título). */
+let vendasList = [], vendasBusca = '';
+const inputVendasSearch = document.getElementById('vendasSearch');
+if(inputVendasSearch){
+  inputVendasSearch.addEventListener('input', e=>{ vendasBusca = e.target.value.trim().toLowerCase(); desenharVendasLista(); });
+}
+
+function desenharVendasLista(){
+  const lista = vendasList.filter(c=>{
+    if(!vendasBusca) return true;
+    const hay = [c.protocolo, c.nome, c.matricula, String(c.matricula||'').replace(/\D/g,''), c.setor,
+      c.notaDebito, brl(c.valorTotal), String(c.valorTotal),
+      ...c.itens.map(it=>`${it.numero} ${it.titulo} ${it.categoria||''}`)]
+      .map(v=>String(v||'').toLowerCase()).join(' ');
+    return hay.includes(vendasBusca);
+  });
+  const total = vendasList.length;
+  const cnt = document.getElementById('vendasCount');
+  if(cnt) cnt.textContent = vendasBusca
+    ? `${lista.length} de ${total} ${total===1?'venda':'vendas'} — busca: "${vendasBusca}"`
+    : `${total} ${total===1?'venda concluída':'vendas concluídas'}`;
+  const vazio = document.getElementById('vendasVazio');
+  if(vazio){
+    vazio.classList.toggle('hidden', lista.length>0);
+    vazio.innerHTML = total && !lista.length
+      ? '<div class="big">🔎</div>Nenhuma venda encontrada com esse termo.'
+      : '<div class="big">💰</div>Nenhuma venda concluída ainda.';
+  }
+  document.getElementById('vendasLista').innerHTML = lista.map(c=>`
+    <div class="ticket">
+      <div class="ticket-top">
+        <div>
+          <span class="mono" style="font-size:11.5px;color:var(--ink-soft);">${c.protocolo}</span>
+          ${c.notaDebito ? `<span class="badge badge-ok" style="margin-left:8px;">ND ${c.notaDebito}</span>` : ''}
+          <div style="font-weight:700;margin-top:2px;">${esc(c.nome)}</div>
+        </div>
+        <div class="val">${brl(c.valorTotal)}</div>
+      </div>
+      <div class="items-list">${c.itens.map(it=>`Nº ${esc(it.numero)} — ${esc(it.titulo)} (${it.quantidade}x)`).join(' · ')}</div>
+      <div class="meta" style="margin-top:4px;">Aberto em ${new Date(c.dataAbertura).toLocaleDateString('pt-BR')} · ${esc(c.setor||'—')} · CPF ${esc(formatCpf(c.matricula))}</div>
+      ${c.pagamento==='Pix' ? `<div class="dp-actions" style="margin-top:8px;">
+        <button class="btn btn-outline btn-sm" onclick="baixarNotaDebito('${c.protocolo}', this)">Baixar Nota de Débito</button>
+        <button class="btn btn-outline btn-sm" onclick="regerarNotaDebito('${c.protocolo}', this)">Regerar ND</button>
+      </div>` : ''}
+    </div>
+  `).join('');
+}
+
 async function refreshAdmin(){
   try{ await loadCatalog(); } catch(e){ console.error(e); }
   renderDP();
