@@ -403,6 +403,8 @@
           <span id="libMsg" style="font-size:12.5px;color:var(--ink-soft);"></span>
         </div>
 
+        <div class="search-box" style="max-width:380px;margin:0 0 16px;"><input type="text" id="libSearch" placeholder="Buscar por nome, nº do item, protocolo, setor ou CPF..."></div>
+
         <h2 style="font-size:16px;margin:0 0 4px;">1 · Para liberar <span id="libFilaCount" style="font-size:12.8px;font-weight:600;color:var(--ink-soft);"></span></h2>
         <p style="color:var(--ink-soft);font-size:12.8px;margin:0 0 12px;">Fila por ordem de chegada — o que esperou mais tempo vem primeiro. Confira o pagamento, separe o item e clique em <b>Liberar</b> pra avisar o comprador por e-mail.</p>
         <div id="libFila"></div>
@@ -1740,7 +1742,17 @@ function switchAdminSub(name){
 /* ============ LIBERAÇÃO DE HOJE (fila da TI) ============
    Três blocos na ordem do trabalho: o que falta liberar (mais antigo
    primeiro), o que já foi liberado e espera retirada, e o que saiu hoje. */
-let libLista = [];
+let libLista = [], libBusca = '';
+const inputLibSearch = document.getElementById('libSearch');
+if(inputLibSearch){
+  inputLibSearch.addEventListener('input', e=>{ libBusca = e.target.value.trim().toLowerCase(); desenharLiberacao(); });
+}
+function casaBuscaLib(c){
+  if(!libBusca) return true;
+  const hay = [c.protocolo, c.nome, c.matricula, String(c.matricula||'').replace(/\D/g,''), c.setor, c.notaDebito,
+    ...c.itens.map(it=>`${it.numero} ${it.titulo} ${it.categoria||''}`)].map(v=>String(v||'').toLowerCase()).join(' ');
+  return hay.includes(libBusca);
+}
 
 function ehHoje(iso){
   if(!iso) return false;
@@ -1776,13 +1788,13 @@ async function renderLiberacao(){
 }
 
 function desenharLiberacao(){
-  const fila = libLista.filter(c=>c.status==='Aguardando conferência da TI')
+  const fila = libLista.filter(c=>c.status==='Aguardando conferência da TI').filter(casaBuscaLib)
     .sort((a,b)=>new Date(a.dataAbertura)-new Date(b.dataAbertura)); // mais antigo primeiro
   const noFiscal = libLista.filter(c=>c.status==='Em liberação do Fiscal').length;
-  const aguardando = libLista.filter(c=>c.status==='Concluído' && !c.entregueEm)
+  const aguardando = libLista.filter(c=>c.status==='Concluído' && !c.entregueEm).filter(casaBuscaLib)
     .sort((a,b)=>new Date(a.concluidoEm||a.dataAbertura)-new Date(b.concluidoEm||b.dataAbertura));
   const liberadosHoje = libLista.filter(c=>c.status==='Concluído' && ehHoje(c.concluidoEm)).length;
-  const entregues = libLista.filter(c=>ehHoje(c.entregueEm))
+  const entregues = libLista.filter(c=>ehHoje(c.entregueEm)).filter(casaBuscaLib)
     .sort((a,b)=>new Date(b.entregueEm)-new Date(a.entregueEm));
   const itensFila = fila.reduce((a,c)=>a+c.itens.reduce((x,i)=>x+i.quantidade,0),0);
 
@@ -1791,7 +1803,8 @@ function desenharLiberacao(){
     <div class="dp-stat"><div class="n" style="color:var(--success);">${liberadosHoje}</div><div class="l">Liberados hoje</div></div>
     <div class="dp-stat"><div class="n">${aguardando.length}</div><div class="l">Aguardando retirada</div></div>
     <div class="dp-stat"><div class="n" style="color:#5B3FA0;">${entregues.length}</div><div class="l">Retirados hoje</div></div>
-    <div class="dp-stat"><div class="n" style="color:var(--ink-soft);">${noFiscal}</div><div class="l">Ainda no Fiscal</div></div>`;
+    <div class="dp-stat"><div class="n" style="color:var(--ink-soft);">${noFiscal}</div><div class="l">Ainda no Fiscal</div></div>`
+    + (libBusca ? `<div class="dp-stat" style="border-color:var(--primary-mid);"><div class="n" style="font-size:15px;">🔎 "${esc(libBusca)}"</div><div class="l">filtro ativo — limpe a busca pra ver tudo</div></div>` : '');
 
   const cnt = (id, n, s, p) => { const el = document.getElementById(id); if(el) el.textContent = `· ${n} ${n===1?s:p}`; };
   cnt('libFilaCount', fila.length, 'compra', 'compras');
@@ -1816,7 +1829,9 @@ function desenharLiberacao(){
         ${c.temComprovante ? `<button class="btn btn-outline btn-sm" onclick="verComprovanteAdmin('${c.protocolo}')">Ver comprovante</button>` : ''}
         <button class="btn btn-outline btn-sm" onclick="baixarNotaDebito('${c.protocolo}', this)">Baixar ND</button>
       </div>
-    </div>`).join('') : '<div class="empty"><div class="big">🎉</div>Nada na fila — tudo liberado por aqui.</div>';
+    </div>`).join('') : (libBusca
+      ? '<div class="empty"><div class="big">🔎</div>Nenhuma compra na fila com esse termo.</div>'
+      : '<div class="empty"><div class="big">🎉</div>Nada na fila — tudo liberado por aqui.</div>');
 
   document.getElementById('libRetirar').innerHTML = aguardando.length ? aguardando.map(c=>`
     <div class="ticket">
@@ -1899,13 +1914,18 @@ async function renderVendidos(){
       if(res.ok) adminChamadosList = (await res.json()).chamados;
     }catch(err){ console.error('Erro ao carregar chamados', err); }
   }
+  // Tudo o que já foi PAGO entra aqui — inclusive o que ainda não foi
+  // liberado pra retirada (senão o item some da busca entre o Pix e a
+  // liberação, que é justamente quando a TI precisa achar ele).
+  const PAGOS = ['Em liberação do Fiscal', 'Aguardando conferência da TI', 'Concluído'];
   const linhas = [];
-  (adminChamadosList || []).filter(c=>c.status==='Concluído').forEach(c=>{
+  (adminChamadosList || []).filter(c=>PAGOS.includes(c.status)).forEach(c=>{
     (c.itens || []).forEach(it=>{
       linhas.push({
         itemId: it.itemId, numero: it.numero, titulo: it.titulo, descricao: it.descricao || '',
         qtd: it.quantidade, valor: it.preco * it.quantidade, nome: c.nome, setor: c.setor,
-        protocolo: c.protocolo, data: c.dataAbertura,
+        protocolo: c.protocolo, data: c.dataAbertura, statusChamado: c.status,
+        liberado: c.status === 'Concluído', retiradaInfo: c.retiradaInfo || null,
         entregueEm: c.entregueEm || null, entregueObs: c.entregueObs || null,
       });
     });
@@ -1914,9 +1934,10 @@ async function renderVendidos(){
 
   const chipsWrap = document.getElementById('vendidosChips');
   if(chipsWrap){
-    const cAEntregar = linhas.filter(l=>!l.entregueEm).length;
+    const cALiberar = linhas.filter(l=>!l.liberado).length;
+    const cAEntregar = linhas.filter(l=>l.liberado && !l.entregueEm).length;
     const cEntregues = linhas.filter(l=>l.entregueEm).length;
-    const rot = { 'Todos': `Todos (${linhas.length})`, 'A entregar': `A entregar (${cAEntregar})`, 'Entregues': `Entregues (${cEntregues})` };
+    const rot = { 'Todos': `Todos (${linhas.length})`, 'A liberar': `A liberar (${cALiberar})`, 'A entregar': `A entregar (${cAEntregar})`, 'Entregues': `Entregues (${cEntregues})` };
     chipsWrap.innerHTML = Object.keys(rot).map(f=>`<button class="chip ${f===vendidosFiltro?'active':''}" data-vf="${f}">${rot[f]}</button>`).join('');
     chipsWrap.querySelectorAll('.chip').forEach(ch=>{
       ch.addEventListener('click', ()=>{ vendidosFiltro = ch.dataset.vf; renderVendidos(); });
@@ -1924,9 +1945,10 @@ async function renderVendidos(){
   }
 
   const filtradas = linhas.filter(l=>{
-    if(vendidosFiltro==='A entregar' && l.entregueEm) return false;
+    if(vendidosFiltro==='A liberar' && l.liberado) return false;
+    if(vendidosFiltro==='A entregar' && (!l.liberado || l.entregueEm)) return false;
     if(vendidosFiltro==='Entregues' && !l.entregueEm) return false;
-    const hay = (l.numero+' '+l.titulo+' '+l.descricao+' '+l.nome+' '+l.protocolo+' '+(l.setor||'')).toLowerCase();
+    const hay = (l.numero+' '+l.titulo+' '+l.descricao+' '+l.nome+' '+l.protocolo+' '+(l.setor||'')+' '+(l.statusChamado||'')).toLowerCase();
     return !vendidosSearch || hay.includes(vendidosSearch);
   });
   document.getElementById('vendidosCount').textContent =
@@ -1944,9 +1966,11 @@ async function renderVendidos(){
           <div class="dp-row-top">
             <div><span class="mono" style="font-size:11.5px;color:var(--ink-soft);">Nº ${esc(l.numero)}</span> <strong style="margin-left:8px;">${esc(l.titulo)}</strong>${l.qtd>1 ? ` <span class="mono">(${l.qtd}x)</span>` : ''}</div>
             <div style="display:flex;gap:8px;align-items:center;">
-              ${l.entregueEm
-                ? `<span class="badge badge-ok">Entregue ${new Date(l.entregueEm).toLocaleString('pt-BR', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</span>`
-                : `<span class="badge badge-pix">A entregar</span><button class="btn btn-primary btn-sm" onclick="marcarEntrega('${l.protocolo}')">✓ Marcar entregue</button>`}
+              ${!l.liberado
+                ? `<span class="badge badge-dp" title="${esc(l.statusChamado)}">A liberar</span><button class="btn btn-primary btn-sm" onclick="dpDecide('${l.protocolo}','Concluído')">✅ Liberar para retirada</button>`
+                : (l.entregueEm
+                  ? `<span class="badge badge-ok">Entregue ${new Date(l.entregueEm).toLocaleString('pt-BR', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</span>`
+                  : `<span class="badge badge-pix">A entregar</span><button class="btn btn-primary btn-sm" onclick="marcarEntrega('${l.protocolo}')">✓ Marcar entregue</button>`)}
             </div>
           </div>
           ${(l.descricao || (item && item.descricao)) ? `<div style="font-size:12.5px;color:var(--ink-soft);margin:2px 0 6px;">${esc(l.descricao || item.descricao)}</div>` : ''}
@@ -2484,7 +2508,9 @@ async function dpDecide(protocolo, decisao){
     await loadCatalog();
     buildChips(); renderGrid();
     renderDP();
-    if(document.getElementById('admin-sub-liberacao') && !document.getElementById('admin-sub-liberacao').classList.contains('hidden')) renderLiberacao();
+    const visivel = (id) => document.getElementById(id) && !document.getElementById(id).classList.contains('hidden');
+    if(visivel('admin-sub-liberacao')) renderLiberacao();
+    if(visivel('admin-sub-vendidos')) renderVendidos();
   } catch(err){
     console.error('Erro ao processar decisão do DP', err);
     showToast('Não foi possível salvar: ' + err.message);
