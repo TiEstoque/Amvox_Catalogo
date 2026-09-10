@@ -375,6 +375,7 @@
       <p style="color:var(--ink-soft);font-size:13.5px;margin:0 0 18px;">Tudo o que foi pedido, reservado e vendido — em um lugar só.</p>
       <div class="subtabs">
         <button class="subtab-btn active" data-sub="chamados" onclick="switchAdminSub('chamados')">Chamados / Reservas</button>
+        <button class="subtab-btn" data-sub="liberacao" onclick="switchAdminSub('liberacao')">🚚 Liberação de hoje</button>
         <button class="subtab-btn" data-sub="catalogo" onclick="switchAdminSub('catalogo')">Gerenciar catálogo</button>
         <button class="subtab-btn" data-sub="vendidos" onclick="switchAdminSub('vendidos')">Itens vendidos</button>
         <button class="subtab-btn" data-sub="usuarios" onclick="switchAdminSub('usuarios')">Usuários</button>
@@ -391,6 +392,27 @@
         <div class="chip-row" id="dpFilterChips" style="margin-bottom:16px;"></div>
         <div id="dpList"></div>
         <div class="empty hidden" id="dpEmpty"><div class="big">📭</div>Nenhum chamado nessa categoria.</div>
+      </div>
+
+      <!-- Sub: Liberação de hoje (fila da TI: separar, liberar e entregar) -->
+      <div id="admin-sub-liberacao" class="hidden">
+        <div class="dp-summary" id="libSummary"></div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:0 0 18px;">
+          <button class="btn btn-outline btn-sm" onclick="renderLiberacao()">↻ Atualizar</button>
+          <button class="btn btn-outline btn-sm" onclick="copiarListaSeparacao()">📋 Copiar lista de separação</button>
+          <span id="libMsg" style="font-size:12.5px;color:var(--ink-soft);"></span>
+        </div>
+
+        <h2 style="font-size:16px;margin:0 0 4px;">1 · Para liberar <span id="libFilaCount" style="font-size:12.8px;font-weight:600;color:var(--ink-soft);"></span></h2>
+        <p style="color:var(--ink-soft);font-size:12.8px;margin:0 0 12px;">Fila por ordem de chegada — o que esperou mais tempo vem primeiro. Confira o pagamento, separe o item e clique em <b>Liberar</b> pra avisar o comprador por e-mail.</p>
+        <div id="libFila"></div>
+
+        <h2 style="font-size:16px;margin:22px 0 4px;">2 · Liberados, aguardando retirada <span id="libRetirarCount" style="font-size:12.8px;font-weight:600;color:var(--ink-soft);"></span></h2>
+        <p style="color:var(--ink-soft);font-size:12.8px;margin:0 0 12px;">Já avisados por e-mail. Quando a pessoa buscar, clique em <b>Registrar retirada</b>.</p>
+        <div id="libRetirar"></div>
+
+        <h2 style="font-size:16px;margin:22px 0 4px;">3 · Retirados hoje <span id="libEntreguesCount" style="font-size:12.8px;font-weight:600;color:var(--ink-soft);"></span></h2>
+        <div id="libEntregues"></div>
       </div>
 
       <!-- Sub: Itens vendidos (conferência) -->
@@ -1701,16 +1723,147 @@ function switchAdminSub(name){
   document.querySelectorAll('.subtab-btn').forEach(b=>b.classList.toggle('active', b.dataset.sub===name));
   document.getElementById('admin-sub-chamados').classList.toggle('hidden', name!=='chamados');
   document.getElementById('admin-sub-catalogo').classList.toggle('hidden', name!=='catalogo');
+  document.getElementById('admin-sub-liberacao').classList.toggle('hidden', name!=='liberacao');
   document.getElementById('admin-sub-vendidos').classList.toggle('hidden', name!=='vendidos');
   document.getElementById('admin-sub-usuarios').classList.toggle('hidden', name!=='usuarios');
   document.getElementById('admin-sub-vendas').classList.toggle('hidden', name!=='vendas');
   document.getElementById('admin-sub-promocao').classList.toggle('hidden', name!=='promocao');
   if(name==='chamados') renderDP();
+  else if(name==='liberacao') renderLiberacao();
   else if(name==='catalogo') renderManageList();
   else if(name==='vendidos') renderVendidos();
   else if(name==='usuarios') renderUsuarios();
   else if(name==='promocao') renderPromocao();
   else renderVendas();
+}
+
+/* ============ LIBERAÇÃO DE HOJE (fila da TI) ============
+   Três blocos na ordem do trabalho: o que falta liberar (mais antigo
+   primeiro), o que já foi liberado e espera retirada, e o que saiu hoje. */
+let libLista = [];
+
+function ehHoje(iso){
+  if(!iso) return false;
+  const d = new Date(iso), h = new Date();
+  return d.getFullYear()===h.getFullYear() && d.getMonth()===h.getMonth() && d.getDate()===h.getDate();
+}
+function esperaDesde(iso){
+  const ms = Date.now() - new Date(iso).getTime();
+  const h = Math.floor(ms/3600000);
+  if(h < 1) return 'há menos de 1h';
+  if(h < 24) return `há ${h}h`;
+  const d = Math.floor(h/24);
+  return `há ${d} ${d===1?'dia':'dias'}`;
+}
+function itensLinha(c){
+  return c.itens.map(it=>`${it.isStock ? '' : `<b>Nº ${esc(it.numero)}</b> — `}${esc(it.titulo)}${it.quantidade>1?` (${it.quantidade}x)`:''}`).join(' · ');
+}
+
+async function renderLiberacao(){
+  const msg = document.getElementById('libMsg');
+  if(msg) msg.textContent = 'Atualizando...';
+  try{
+    const res = await fetch('/api/reservas', { headers: adminHeaders() });
+    if(!res.ok) throw new Error('Falha ao carregar os chamados.');
+    libLista = (await res.json()).chamados || [];
+    adminChamadosList = libLista;
+    if(msg) msg.textContent = '';
+  }catch(err){
+    if(msg) msg.innerHTML = `<span style="color:var(--danger);font-weight:600;">${esc(err.message)}</span>`;
+    return;
+  }
+  desenharLiberacao();
+}
+
+function desenharLiberacao(){
+  const fila = libLista.filter(c=>c.status==='Aguardando conferência da TI')
+    .sort((a,b)=>new Date(a.dataAbertura)-new Date(b.dataAbertura)); // mais antigo primeiro
+  const noFiscal = libLista.filter(c=>c.status==='Em liberação do Fiscal').length;
+  const aguardando = libLista.filter(c=>c.status==='Concluído' && !c.entregueEm)
+    .sort((a,b)=>new Date(a.concluidoEm||a.dataAbertura)-new Date(b.concluidoEm||b.dataAbertura));
+  const liberadosHoje = libLista.filter(c=>c.status==='Concluído' && ehHoje(c.concluidoEm)).length;
+  const entregues = libLista.filter(c=>ehHoje(c.entregueEm))
+    .sort((a,b)=>new Date(b.entregueEm)-new Date(a.entregueEm));
+  const itensFila = fila.reduce((a,c)=>a+c.itens.reduce((x,i)=>x+i.quantidade,0),0);
+
+  document.getElementById('libSummary').innerHTML = `
+    <div class="dp-stat"><div class="n" style="color:var(--warning);">${fila.length}</div><div class="l">Para liberar (${itensFila} ${itensFila===1?'item':'itens'})</div></div>
+    <div class="dp-stat"><div class="n" style="color:var(--success);">${liberadosHoje}</div><div class="l">Liberados hoje</div></div>
+    <div class="dp-stat"><div class="n">${aguardando.length}</div><div class="l">Aguardando retirada</div></div>
+    <div class="dp-stat"><div class="n" style="color:#5B3FA0;">${entregues.length}</div><div class="l">Retirados hoje</div></div>
+    <div class="dp-stat"><div class="n" style="color:var(--ink-soft);">${noFiscal}</div><div class="l">Ainda no Fiscal</div></div>`;
+
+  const cnt = (id, n, s, p) => { const el = document.getElementById(id); if(el) el.textContent = `· ${n} ${n===1?s:p}`; };
+  cnt('libFilaCount', fila.length, 'compra', 'compras');
+  cnt('libRetirarCount', aguardando.length, 'compra', 'compras');
+  cnt('libEntreguesCount', entregues.length, 'retirada', 'retiradas');
+
+  document.getElementById('libFila').innerHTML = fila.length ? fila.map((c,i)=>`
+    <div class="ticket">
+      <div class="ticket-top">
+        <div>
+          <span class="badge badge-dp">${i+1}º da fila</span>
+          <span class="mono" style="font-size:11.5px;color:var(--ink-soft);margin-left:8px;">${c.protocolo}</span>
+          ${c.notaDebito ? `<span class="badge badge-ok" style="margin-left:8px;">ND ${c.notaDebito}</span>` : ''}
+          <div style="font-weight:700;margin-top:2px;">${esc(c.nome)}</div>
+        </div>
+        <div class="val">${brl(c.valorTotal)}</div>
+      </div>
+      <div class="items-list">${itensLinha(c)}</div>
+      <div class="meta" style="margin-top:4px;">${esc(c.setor||'—')} · CPF ${esc(formatCpf(c.matricula))} · pagou ${esperaDesde(c.dataAbertura)} (${new Date(c.dataAbertura).toLocaleString('pt-BR')})</div>
+      <div class="dp-actions" style="margin-top:8px;">
+        <button class="btn btn-primary btn-sm" onclick="dpDecide('${c.protocolo}','Concluído')">✅ Liberar para retirada</button>
+        ${c.temComprovante ? `<button class="btn btn-outline btn-sm" onclick="verComprovanteAdmin('${c.protocolo}')">Ver comprovante</button>` : ''}
+        <button class="btn btn-outline btn-sm" onclick="baixarNotaDebito('${c.protocolo}', this)">Baixar ND</button>
+      </div>
+    </div>`).join('') : '<div class="empty"><div class="big">🎉</div>Nada na fila — tudo liberado por aqui.</div>';
+
+  document.getElementById('libRetirar').innerHTML = aguardando.length ? aguardando.map(c=>`
+    <div class="ticket">
+      <div class="ticket-top">
+        <div>
+          <span class="mono" style="font-size:11.5px;color:var(--ink-soft);">${c.protocolo}</span>
+          ${ehHoje(c.concluidoEm) ? '<span class="badge badge-ok" style="margin-left:8px;">liberado hoje</span>' : ''}
+          <div style="font-weight:700;margin-top:2px;">${esc(c.nome)}</div>
+        </div>
+        <div class="val">${brl(c.valorTotal)}</div>
+      </div>
+      <div class="items-list">${itensLinha(c)}</div>
+      <div class="meta" style="margin-top:4px;">${esc(c.setor||'—')}${c.retiradaInfo ? ` · retirada combinada: <b>${esc(c.retiradaInfo)}</b>` : ''}${c.concluidoEm ? ` · liberado em ${new Date(c.concluidoEm).toLocaleString('pt-BR')}` : ''}</div>
+      <div class="dp-actions" style="margin-top:8px;">
+        <button class="btn btn-primary btn-sm" onclick="marcarEntrega('${c.protocolo}')">📦 Registrar retirada</button>
+        <button class="btn btn-outline btn-sm" onclick="baixarNotaDebito('${c.protocolo}', this)">Baixar ND</button>
+      </div>
+    </div>`).join('') : '<div class="empty"><div class="big">📦</div>Ninguém aguardando retirada.</div>';
+
+  document.getElementById('libEntregues').innerHTML = entregues.length ? entregues.map(c=>`
+    <div class="ticket">
+      <div class="ticket-top">
+        <div><span class="mono" style="font-size:11.5px;color:var(--ink-soft);">${c.protocolo}</span>
+          <div style="font-weight:700;margin-top:2px;">${esc(c.nome)}</div></div>
+        <div class="val">${brl(c.valorTotal)}</div>
+      </div>
+      <div class="items-list">${itensLinha(c)}</div>
+      <div class="meta" style="margin-top:4px;">✅ retirado às ${new Date(c.entregueEm).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}${c.entregueObs ? ` · ${esc(c.entregueObs)}` : ''}</div>
+    </div>`).join('') : '<div class="empty"><div class="big">🕒</div>Nenhuma retirada registrada hoje.</div>';
+}
+
+// Lista pra levar até o estoque (ou colar no WhatsApp) com o que separar hoje.
+function copiarListaSeparacao(){
+  const fila = libLista.filter(c=>c.status==='Aguardando conferência da TI')
+    .sort((a,b)=>new Date(a.dataAbertura)-new Date(b.dataAbertura));
+  const aguardando = libLista.filter(c=>c.status==='Concluído' && !c.entregueEm);
+  const bloco = (titulo, lista) => !lista.length ? '' : `${titulo}\n` + lista.map((c,i)=>
+    `${i+1}. ${c.nome} (${c.setor || '-'}) — ${c.protocolo}\n   ` +
+    c.itens.map(it=>`${it.isStock ? '' : 'Nº ' + it.numero + ' — '}${it.titulo}${it.quantidade>1?` (${it.quantidade}x)`:''}`).join('\n   ')
+  ).join('\n') + '\n\n';
+  const txt = `SEPARAÇÃO — ${new Date().toLocaleDateString('pt-BR')}\n\n` +
+    bloco(`PARA LIBERAR (${fila.length}):`, fila) +
+    bloco(`AGUARDANDO RETIRADA (${aguardando.length}):`, aguardando);
+  const msg = document.getElementById('libMsg');
+  const ok = () => { if(msg) msg.textContent = '✓ Lista copiada — é só colar.'; };
+  if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(ok).catch(()=>prompt('Copie a lista:', txt));
+  else prompt('Copie a lista:', txt);
 }
 
 /* ============ ITENS VENDIDOS (conferência e entrega) ============ */
@@ -1732,6 +1885,7 @@ async function marcarEntrega(protocolo){
     if(c){ c.entregueEm = new Date().toISOString(); c.entregueObs = obs.trim() || null; }
     showToast('Entrega registrada ✓');
     renderVendidos();
+    if(document.getElementById('admin-sub-liberacao') && !document.getElementById('admin-sub-liberacao').classList.contains('hidden')) renderLiberacao();
   }catch(err){
     showToast(err.message || 'Não foi possível registrar a entrega.');
   }
@@ -2330,6 +2484,7 @@ async function dpDecide(protocolo, decisao){
     await loadCatalog();
     buildChips(); renderGrid();
     renderDP();
+    if(document.getElementById('admin-sub-liberacao') && !document.getElementById('admin-sub-liberacao').classList.contains('hidden')) renderLiberacao();
   } catch(err){
     console.error('Erro ao processar decisão do DP', err);
     showToast('Não foi possível salvar: ' + err.message);

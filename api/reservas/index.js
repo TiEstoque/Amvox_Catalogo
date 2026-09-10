@@ -496,6 +496,7 @@ function shapeChamado(c, itens, descricaoPorItemId = {}, notaDebito = null) {
     status: c.status,
     observacaoDP: c.observacao_dp,
     temComprovante: !!c.comprovante_path,
+    concluidoEm: c.concluido_em || null,
     entregueEm: c.entregue_em || null,
     entregueObs: c.entregue_obs || null,
     email: c.email || null,

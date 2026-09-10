@@ -176,6 +176,10 @@ export default async function handler(req, res) {
     if (status === 'Concluído' && retirada) {
       updatePayload.retirada_info = retirada;
     }
+    if (status === 'Concluído' && !chamado.concluido_em) {
+      // momento da liberação — a aba "Liberação" usa pra mostrar o que saiu hoje
+      updatePayload.concluido_em = new Date().toISOString();
+    }
     const { error: updErr } = await supabase.from('chamados').update(updatePayload).eq('protocolo', protocolo);
     if (updErr) throw updErr;
 
