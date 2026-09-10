@@ -415,7 +415,7 @@
             <div class="field"><label>Categoria</label>
               <select id="newCategoria">
                 <option>Computadores</option><option>Monitores</option><option>Impressoras</option>
-                <option>SSDs e Periféricos</option><option>Câmeras WiFi</option><option>Suportes de madeira para monitor</option><option value="__outra">Outra categoria...</option>
+                <option>SSDs e Periféricos</option><option>Câmeras WiFi</option><option>Cooler Notebook</option><option>Suportes de madeira para monitor</option><option value="__outra">Outra categoria...</option>
               </select>
             </div>
             <div class="field span2" id="newCategoriaCustomWrap" style="display:none;">
@@ -883,10 +883,13 @@ function nomeCategoriaFront(cat, n){
   if(c === 'monitores') return n === 1 ? 'monitor' : 'monitores';
   return `${n === 1 ? 'item de' : 'itens de'} ${cat}`;
 }
-// "1 computador e 2 monitores"
+// "1 computador e 2 monitores" — ou, quando todas as categorias têm máximo 1,
+// "1 item de cada categoria".
 function descreverLimitesCat(lim){
-  const partes = Object.entries(lim || {}).map(([cat, n]) => `${n} ${nomeCategoriaFront(cat, n)}`);
-  if(!partes.length) return '';
+  const entradas = Object.entries(lim || {});
+  if(!entradas.length) return '';
+  if(entradas.length >= 2 && entradas.every(([, n]) => n === 1)) return '1 item de cada categoria';
+  const partes = entradas.map(([cat, n]) => `${n} ${nomeCategoriaFront(cat, n)}`);
   return partes.length === 1 ? partes[0] : partes.slice(0, -1).join(', ') + ' e ' + partes[partes.length - 1];
 }
 function atualizarTextoLimites(){
