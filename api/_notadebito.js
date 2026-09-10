@@ -87,6 +87,21 @@ export async function gerarNotaDebito({ protocolo, pagador, cpf, valorTotal, ite
     nd.getCell('C14').value = linhasItens[1].valor; // total = SUM(C13:C14) no modelo
   }
 
+  // Datas: o modelo traz D5/D7 como fórmula (=PARAMETROS!B6/B7) com o
+  // resultado ANTIGO em cache (31/08/2026). Quem abre num visualizador que
+  // não recalcula (Pré-visualização do Mac, Google Drive, celular, PDF) via
+  // a data errada — por isso gravamos a data direto na célula.
+  nd.getCell('D5').value = dataEmissao;
+  nd.getCell('D7').value = dataEmissao;
+
+  // Totais: mantêm a fórmula, mas agora com o resultado já calculado. Sem
+  // isso o arquivo carregava o total do modelo (R$ 200) em TODAS as notas.
+  const totalItens = linhasItens.reduce((a, l) => a + (Number(l.valor) || 0), 0);
+  nd.getCell('C16').value = { formula: 'SUM(C13:C14)', result: totalItens };
+  nd.getCell('D16').value = { formula: 'SUM(D13:D14)', result: 0 };
+  nd.getCell('D17').value = { formula: 'C16+D16', result: totalItens };
+  nd.getCell('D23').value = { formula: 'D17-D19-D21', result: totalItens };
+
   // descrições podem ser longas: quebra de linha + altura maior nas linhas de item
   [13, 14].forEach((r) => {
     const cell = nd.getCell(`B${r}`);
@@ -106,19 +121,16 @@ export async function gerarNotaDebito({ protocolo, pagador, cpf, valorTotal, ite
     });
   }
 
-  // 4) CONTROLE — regista a nota emitida
-  const linhaControle = controle.lastRow.number + 1;
-  const origem = controle.getRow(4);
-  const nova = controle.getRow(linhaControle);
-  nova.getCell(1).value = numero;
-  nova.getCell(2).value = dataEmissao;
-  nova.getCell(3).value = pagadorComCpf;
-  nova.getCell(4).value = valorTotal;
-  nova.getCell(5).value = 'Emitida';
-  [1, 2, 3, 4, 5].forEach((c) => {
-    nova.getCell(c).style = origem.getCell(c).style;
-  });
-  nova.commit();
+  // 4) CONTROLE — regista a nota emitida. Cada arquivo é uma cópia nova do
+  // modelo, então a linha 4 (que no modelo traz a ND de exemplo) passa a ser
+  // ESTA nota — senão o Fiscal abre e vê o pagador/valor do exemplo.
+  const linhaControle = controle.getRow(4);
+  linhaControle.getCell(1).value = numero;
+  linhaControle.getCell(2).value = dataEmissao;
+  linhaControle.getCell(3).value = pagadorComCpf;
+  linhaControle.getCell(4).value = valorTotal;
+  linhaControle.getCell(5).value = 'Emitida';
+  linhaControle.commit();
 
   const outBuffer = await wb.xlsx.writeBuffer();
   return { numero, sequencial, buffer: outBuffer };
