@@ -342,7 +342,7 @@
     <div class="info-strip">
       <div class="info-item">
         <div class="info-icon">🛒</div>
-        <div><h3>Até 6 itens por pessoa</h3><p>Escolha seus itens (máximo de <b>6 por pessoa</b>, somando reservas e compras anteriores<span id="limitesCatTexto"></span>) e finalize numa reserva só. Depois, não esqueça de abrir o chamado no Gestão.</p></div>
+        <div><h3 id="cardLimiteTitulo">Itens por pessoa</h3><p id="cardLimiteTexto">Escolha seus itens e finalize numa reserva só. Depois, não esqueça de abrir o chamado no Gestão.</p></div>
       </div>
       <div class="info-item">
         <div class="info-icon">🔒</div>
@@ -553,6 +553,15 @@
         <div class="form-card" id="limiteCard">
           <h2>Limite de itens por pessoa <span id="limiteResumo" style="font-size:12.5px;font-weight:600;color:var(--ink-soft);"></span></h2>
           <p id="limiteTexto">Cada pessoa pode comprar até 6 itens (ou o limite individual liberado no botão "Limite" de cada usuário), somando reservas e compras. Carregando...</p>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px;">
+            <label style="font-size:12.5px;font-weight:600;color:var(--ink-soft);display:flex;flex-direction:column;gap:4px;">
+              Cota por pessoa
+              <input type="number" id="limitePadraoInput" min="0" max="999" step="1" placeholder="sem limite" style="width:140px;border:1px solid var(--line);border-radius:9px;padding:8px 10px;font-family:'IBM Plex Sans';font-size:13px;">
+            </label>
+            <button class="btn btn-primary btn-sm" style="white-space:nowrap;" onclick="salvarLimitePadrao()">Salvar cota</button>
+            <button class="btn btn-outline btn-sm" style="white-space:nowrap;" onclick="limparLimitePadrao()">Sem limite</button>
+            <span id="limitePadraoMsg" style="font-size:12.5px;color:var(--ink-soft);"></span>
+          </div>
           <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
             <button class="btn btn-primary btn-sm" id="limiteBtnZerar" onclick="zerarContagemLimite()">🔄 Zerar contagem (segunda rodada)</button>
             <button class="btn btn-outline btn-sm hidden" id="limiteBtnRestaurar" onclick="restaurarContagemLimite()">Voltar a contar todas as compras</button>
@@ -970,7 +979,7 @@ function cartQty(itemId){ const l = cart.find(c=>c.itemId===itemId); return l ? 
 // catálogo (6 por pessoa) e, depois que ela entra, vira o saldo real dela
 // (limite por pessoa menos reservas/compras anteriores). A TI pode liberar um
 // limite maior pra alguém no Painel (Usuários → Limite).
-let LIMITE_POR_RESERVA = 6;
+let LIMITE_POR_RESERVA = Infinity;   // ajustado por /api/reservas?limites=1
 // Sublimites por categoria (ex.: {Computadores:1, Monitores:2}) e quanto a
 // pessoa já usou de cada uma (reservas + compras). Vêm do servidor.
 let limitesCategoria = {};
@@ -1004,13 +1013,22 @@ function descreverLimitesCat(lim){
 // pessoa filtra a categoria (aviso abaixo dos chips) e quando o carrinho
 // barra o item.
 function atualizarTextoLimites(){
-  const el = document.getElementById('limitesCatTexto');
-  if(el){
-    const entradas = limitesQuePesam(limitesCategoria);
-    if(!entradas.length) el.innerHTML = '';
-    else if(entradas.length <= 2) el.innerHTML = `; no máximo <b>${esc(descreverLimitesCat(limitesCategoria))}</b>`;
-    else el.innerHTML = '; <b>algumas categorias têm limite próprio</b> — o catálogo avisa na hora';
-  }
+  const semLimite = !Number.isFinite(LIMITE_PADRAO_CAT);
+  const entradas = limitesQuePesam(limitesCategoria);
+  let regra = '';
+  if(entradas.length && entradas.length <= 2) regra = `no máximo <b>${esc(descreverLimitesCat(limitesCategoria))}</b>`;
+  else if(entradas.length > 2) regra = '<b>algumas categorias têm limite próprio</b> — o catálogo avisa na hora';
+
+  const titulo = document.getElementById('cardLimiteTitulo');
+  if(titulo) titulo.textContent = semLimite
+    ? 'Compre quantos itens quiser'
+    : `Até ${LIMITE_PADRAO_CAT} ${LIMITE_PADRAO_CAT === 1 ? 'item' : 'itens'} por pessoa`;
+
+  const texto = document.getElementById('cardLimiteTexto');
+  if(texto) texto.innerHTML = semLimite
+    ? `Não tem limite de itens por pessoa${regra ? ` — ${regra}` : ''}. Escolha tudo o que quiser e finalize numa reserva só. Depois, não esqueça de abrir o chamado no Gestão.`
+    : `Escolha seus itens (máximo de <b>${LIMITE_PADRAO_CAT} por pessoa</b>, somando reservas e compras anteriores${regra ? `; ${regra}` : ''}) e finalize numa reserva só. Depois, não esqueça de abrir o chamado no Gestão.`;
+
   atualizarAvisoCategoria();
 }
 
@@ -1039,7 +1057,9 @@ async function atualizarLimiteReserva(){
     if(resL.ok){
       const l = await resL.json();
       limitesCategoria = l.porCategoria || {};
-      LIMITE_PADRAO_CAT = Number(l.limitePadrao) || LIMITE_PADRAO_CAT;
+      // limitePadrao null = sem limite (Infinity não atravessa o JSON)
+      LIMITE_PADRAO_CAT = (l.limitePadrao === null || l.limitePadrao === undefined) ? Infinity : Number(l.limitePadrao);
+      LIMITE_POR_RESERVA = LIMITE_PADRAO_CAT;
       PRECOS_VALIDOS_ATE = l.precosValidosAte || null;
       atualizarAvisoPrecos();
     }
@@ -1052,7 +1072,9 @@ async function atualizarLimiteReserva(){
     const res = await fetch('/api/reservas?saldoCpf=' + encodeURIComponent(cpf));
     const d = await res.json();
     if(!res.ok) return;
-    LIMITE_POR_RESERVA = Math.max(0, Number(d.disponivel) || 0);
+    LIMITE_POR_RESERVA = (d.disponivel === null || d.disponivel === undefined)
+      ? Infinity
+      : Math.max(0, Number(d.disponivel) || 0);
     usadosCategoria = {};
     Object.entries(d.porCategoria || {}).forEach(([cat, v]) => { limitesCategoria[cat] = v.limite; usadosCategoria[cat] = v.usados || 0; });
     atualizarTextoLimites();
@@ -3328,15 +3350,21 @@ async function carregarContagemLimite(){
     const d = await res.json();
     if(!res.ok) throw new Error(d.error || 'Falha ao consultar a contagem do limite.');
     const desde = d.limiteDesde ? new Date(d.limiteDesde) : null;
+    const padrao = (d.limitePadrao === null || d.limitePadrao === undefined) ? null : Number(d.limitePadrao);
+    const inpPadrao = document.getElementById('limitePadraoInput');
+    if(inpPadrao) inpPadrao.value = padrao === null ? '' : padrao;
+    const cotaTxt = padrao === null ? '<b>quantos itens quiser</b>' : `até <b>${padrao} itens</b>`;
     desenharLimitesCategoria(d.limitesCategoria || {});
     PRECOS_VALIDOS_ATE = d.precosValidosAte || null;
     pintarVigencia(PRECOS_VALIDOS_ATE, d.precosVigenciaModo, d.precosDataFixa);
     atualizarAvisoPrecos();
     document.getElementById('limiteBtnRestaurar').classList.toggle('hidden', !desde);
     document.getElementById('limiteResumo').textContent = desde ? `· contando desde ${desde.toLocaleString('pt-BR')}` : '· contando todas as compras';
-    txt.innerHTML = desde
-      ? `Cada pessoa pode comprar até 6 itens (ou o limite individual liberado no botão "Limite"). <b>Segunda rodada ativa:</b> só as reservas e compras feitas a partir de <b>${desde.toLocaleString('pt-BR')}</b> contam no limite — as anteriores ficam no histórico, mas não descontam.`
-      : `Cada pessoa pode comprar até 6 itens (ou o limite individual liberado no botão "Limite"), somando <b>todas</b> as reservas e compras. "Zerar contagem" abre uma segunda rodada: as compras já feitas deixam de contar e todo mundo volta a ter a cota inteira.`;
+    txt.innerHTML = padrao === null
+      ? `Cada pessoa pode comprar <b>quantos itens quiser</b>, enquanto houver estoque — sem cota por pessoa. Pra voltar a limitar, escreva um número no campo acima e salve. A cota individual do botão "Limite" de cada usuário continua valendo pra quem tiver uma.`
+      : (desde
+        ? `Cada pessoa pode comprar ${cotaTxt} (ou a cota individual liberada no botão "Limite"). <b>Segunda rodada ativa:</b> só as reservas e compras feitas a partir de <b>${desde.toLocaleString('pt-BR')}</b> contam no limite — as anteriores ficam no histórico, mas não descontam.`
+        : `Cada pessoa pode comprar ${cotaTxt} (ou a cota individual liberada no botão "Limite"), somando <b>todas</b> as reservas e compras. "Zerar contagem" abre uma segunda rodada: as compras já feitas deixam de contar e todo mundo volta a ter a cota inteira.`);
   }catch(err){
     txt.innerHTML = `<span style="color:var(--danger);font-weight:600;">${esc(err.message)}</span>`;
   }
@@ -3370,6 +3398,37 @@ async function salvarLimitesCategoria(){
     msg.textContent = txt ? `✓ Salvo: no máximo ${txt} por pessoa.` : '✓ Salvo: sem máximos por categoria.';
   }catch(err){ msg.textContent = ''; showToast(err.message || 'Falha ao salvar.'); }
   finally{ btn.disabled = false; }
+}
+
+async function salvarLimitePadrao(){
+  const inp = document.getElementById('limitePadraoInput');
+  const v = String((inp && inp.value) || '').trim();
+  if(v === ''){ await limparLimitePadrao(); return; }
+  const n = parseInt(v, 10);
+  if(!Number.isInteger(n) || n < 0 || n > 999){ showToast('Use um número de 0 a 999, ou deixe em branco pra não ter limite.'); return; }
+  await postLimitePadrao(String(n), `Cota de ${n} ${n === 1 ? 'item' : 'itens'} por pessoa salva. ✓`);
+}
+async function limparLimitePadrao(){
+  if(!confirm('Tirar o limite de itens por pessoa?\n\nCada colaborador vai poder comprar quantos itens quiser, enquanto houver estoque.')) return;
+  await postLimitePadrao(null, 'Sem limite: cada pessoa compra quantos itens quiser. ✓');
+}
+async function postLimitePadrao(valor, okMsg){
+  const msg = document.getElementById('limitePadraoMsg');
+  if(msg) msg.textContent = 'Salvando...';
+  try{
+    const res = await fetch('/api/usuarios?recurso=limite', {
+      method:'POST', headers: adminHeaders({'Content-Type':'application/json'}), body: JSON.stringify({ acao: 'padrao', valor })
+    });
+    const d = await res.json();
+    if(!res.ok) throw new Error(d.error || 'Falha ao salvar a cota.');
+    if(msg) msg.textContent = '';
+    showToast(okMsg);
+    await carregarContagemLimite();
+    await atualizarLimiteReserva();
+  }catch(err){
+    if(msg) msg.textContent = '';
+    showToast(err.message || 'Falha ao salvar a cota.');
+  }
 }
 
 async function zerarContagemLimite(){

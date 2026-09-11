@@ -35,6 +35,7 @@ export default async function handler(req, res) {
     // POST ?recurso=limite { acao: 'zerar' }    -> só compras a partir de agora contam (segunda rodada)
     // POST ?recurso=limite { acao: 'restaurar' }-> volta a contar todas as compras
     // POST ?recurso=limite { acao: 'categorias', limites: {cat: n} } -> sublimites por categoria
+    // POST ?recurso=limite { acao: 'padrao', valor: N|null } -> cota por pessoa (vazio = sem limite)
     // POST ?recurso=limite { acao: 'vigencia', modo: 'diario' } -> renova sozinha todo dia às 17h
     // POST ?recurso=limite { acao: 'vigencia', valor: ISO|null } -> data fixa até quando os preços valem
     if (String(req.query.recurso || '') === 'limite') {
@@ -42,13 +43,16 @@ export default async function handler(req, res) {
         const { data, error } = await supabase
           .from('config_catalogo')
           .select('chave, valor')
-          .in('chave', ['limite_desde', 'limites_categoria']);
+          .in('chave', ['limite_desde', 'limites_categoria', 'limite_padrao']);
         if (error) throw error;
         const cfg = Object.fromEntries((data || []).map((r) => [r.chave, r.valor]));
         const vigencia = await lerVigencia(supabase);
         let limitesCategoria = {};
         try { limitesCategoria = cfg.limites_categoria ? JSON.parse(cfg.limites_categoria) : {}; } catch { limitesCategoria = {}; }
+        const temPadrao = Object.prototype.hasOwnProperty.call(cfg, 'limite_padrao');
+        const padraoTxt = String(cfg.limite_padrao === null || cfg.limite_padrao === undefined ? '' : cfg.limite_padrao).trim();
         return res.status(200).json({
+          limitePadrao: !temPadrao ? 6 : (padraoTxt === '' ? null : Number(padraoTxt)),
           limiteDesde: cfg.limite_desde || null,
           limitesCategoria,
           precosValidosAte: vigencia.precosValidosAte,
@@ -85,6 +89,27 @@ export default async function handler(req, res) {
         // { acao: 'vigencia', valor: '2026-09-18T20:00:00.000Z' | null }
         // -> até quando a tabela de preços vale. Aparece no aviso do topo do
         //    catálogo e no rodapé do e-mail de promoção. Vazio = sem prazo.
+        // { acao: 'padrao', valor: 6 | null } -> cota de itens por pessoa.
+        // null/vazio = sem limite nenhum.
+        if (acao === 'padrao') {
+          const bruto = body.valor === null || body.valor === undefined || String(body.valor).trim() === ''
+            ? null
+            : String(body.valor).trim();
+          let valor = null;
+          if (bruto !== null) {
+            const n = parseInt(bruto, 10);
+            if (!Number.isInteger(n) || n < 0 || n > 999) {
+              return res.status(400).json({ error: 'Use um número de 0 a 999, ou deixe em branco pra não ter limite.' });
+            }
+            valor = String(n);
+          }
+          const { error } = await supabase
+            .from('config_catalogo')
+            .upsert({ chave: 'limite_padrao', valor, atualizado_em: new Date().toISOString(), atualizado_por: 'Painel' }, { onConflict: 'chave' });
+          if (error) throw error;
+          return res.status(200).json({ ok: true, limitePadrao: valor === null ? null : Number(valor) });
+        }
+
         if (acao === 'vigencia') {
           const modo = String(body.modo || '') === 'diario' ? 'diario' : 'fixa';
           const bruto = body.valor === null || body.valor === undefined || String(body.valor).trim() === ''

@@ -19,10 +19,29 @@ export const config = {
   },
 };
 
-// Limite de itens por pessoa (somando reservas ativas e compras). O padrão é
-// 4; a TI pode liberar um limite diferente pra alguém no Painel (Usuários →
-// Limite), que fica em cadastros_acesso.limite_itens.
-const LIMITE_PADRAO = 6;
+// Cota de itens por pessoa, somando reservas ativas e compras. Vem de
+// config_catalogo.limite_padrao e é editada no Painel (Usuários → Limite de
+// itens por pessoa):
+//   chave ausente  -> usa LIMITE_PADRAO_FALLBACK
+//   valor vazio    -> SEM LIMITE (a pessoa leva quantos quiser)
+//   valor numérico -> essa cota
+// A TI ainda pode dar uma cota individual a alguém (cadastros_acesso.
+// limite_itens), que vence esta.
+const LIMITE_PADRAO_FALLBACK = 6;
+
+async function limitePadrao(supabase) {
+  const { data, error } = await supabase
+    .from('config_catalogo')
+    .select('valor')
+    .eq('chave', 'limite_padrao')
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return LIMITE_PADRAO_FALLBACK;
+  const v = String(data.valor === null || data.valor === undefined ? '' : data.valor).trim();
+  if (v === '') return Infinity;
+  const n = parseInt(v, 10);
+  return Number.isInteger(n) && n >= 0 ? n : LIMITE_PADRAO_FALLBACK;
+}
 
 // "Zerar contagem do limite" (Painel → Usuários): quando config_catalogo.
 // limite_desde está definido, só os chamados abertos a partir dessa data
@@ -73,8 +92,9 @@ function nomeCategoria(cat, n) {
 }
 
 async function limiteParaCpf(supabase, cpf) {
+  const padrao = await limitePadrao(supabase);
   const limpo = String(cpf || '').replace(/\D/g, '');
-  if (limpo.length !== 11) return LIMITE_PADRAO;
+  if (limpo.length !== 11) return padrao;
   const { data, error } = await supabase
     .from('cadastros_acesso')
     .select('limite_itens')
@@ -82,7 +102,13 @@ async function limiteParaCpf(supabase, cpf) {
     .maybeSingle();
   if (error) throw error;
   const l = data ? data.limite_itens : null;
-  return Number.isInteger(l) && l >= 0 ? l : LIMITE_PADRAO;
+  return Number.isInteger(l) && l >= 0 ? l : padrao;
+}
+
+// Infinity não sobrevive ao JSON (vira null). O front trata null como
+// "sem limite" — e não como zero, que travaria o carrinho.
+function numeroOuNulo(n) {
+  return Number.isFinite(n) ? n : null;
 }
 
 export default async function handler(req, res) {
@@ -96,8 +122,10 @@ export default async function handler(req, res) {
       // GET /api/reservas?limites=1 -> regras públicas (limite padrão e
       // sublimites por categoria), usadas pelo carrinho antes do login.
       if (req.query.limites) {
-        const [porCategoria, precosAte] = await Promise.all([limitesCategoria(supabase), vigenciaAtual(supabase)]);
-        return res.status(200).json({ limitePadrao: LIMITE_PADRAO, porCategoria, precosValidosAte: precosAte });
+        const [porCategoria, precosAte, padrao] = await Promise.all([
+          limitesCategoria(supabase), vigenciaAtual(supabase), limitePadrao(supabase),
+        ]);
+        return res.status(200).json({ limitePadrao: numeroOuNulo(padrao), porCategoria, precosValidosAte: precosAte });
       }
 
       const saldoCpf = String(req.query.saldoCpf || '').replace(/\D/g, '');
@@ -133,7 +161,12 @@ export default async function handler(req, res) {
         for (const [cat, lim] of Object.entries(limCat)) {
           porCategoria[cat] = { limite: lim, usados: usadosCat[cat] || 0, disponivel: Math.max(0, lim - (usadosCat[cat] || 0)) };
         }
-        return res.status(200).json({ limite: LIMITE, usados, disponivel: Math.max(0, LIMITE - usados), porCategoria });
+        return res.status(200).json({
+          limite: numeroOuNulo(LIMITE),
+          usados,
+          disponivel: numeroOuNulo(Number.isFinite(LIMITE) ? Math.max(0, LIMITE - usados) : Infinity),
+          porCategoria,
+        });
       }
 
       const q = String(req.query.q || '').trim();
@@ -288,7 +321,7 @@ export default async function handler(req, res) {
       const cpfLimpo = String(matricula).replace(/\D/g, '');
       const LIMITE_POR_PESSOA = await limiteParaCpf(supabase, cpfLimpo);
       const qtdNova = linhas.reduce((a, l) => a + l.qty, 0);
-      if (qtdNova > LIMITE_POR_PESSOA) {
+      if (Number.isFinite(LIMITE_POR_PESSOA) && qtdNova > LIMITE_POR_PESSOA) {
         return res.status(400).json({ error: `Limite: no máximo ${LIMITE_POR_PESSOA} itens por pessoa.` });
       }
 
@@ -317,7 +350,7 @@ export default async function handler(req, res) {
         }
       }
 
-      if (qtdExistente + qtdNova > LIMITE_POR_PESSOA) {
+      if (Number.isFinite(LIMITE_POR_PESSOA) && qtdExistente + qtdNova > LIMITE_POR_PESSOA) {
         return res.status(400).json({
           error: `Limite de ${LIMITE_POR_PESSOA} itens por pessoa: você já tem ${qtdExistente} entre reservas e compras. Dúvidas? Procure a TI.`,
         });
