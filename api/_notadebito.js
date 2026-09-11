@@ -42,6 +42,10 @@ function montarItens(itensChamado, valorTotal) {
 // dia da compra — e de que reajuste posterior não mexe no que ele pagou.
 const JANELA_PRECOS = { inicio: '07h00', fim: '17h00' };
 
+// Aviso de saldão, em destaque logo acima da assinatura: são equipamentos
+// usados, vendidos no estado em que estão e sem garantia.
+const AVISO_GARANTIA = 'PRODUTO SEM GARANTIA (produto saldão) — vendido no estado em que se encontra.';
+
 function fmtDataBahia(d) {
   return new Intl.DateTimeFormat('pt-BR', {
     timeZone: 'America/Bahia', day: '2-digit', month: '2-digit', year: 'numeric',
@@ -145,13 +149,18 @@ export async function gerarNotaDebito({ protocolo, pagador, cpf, valorTotal, ite
     }
   });
 
-  // Vigência do preço, entre os totais e a linha de assinatura (A25:D25).
+  // Aviso de garantia + vigência do preço, entre os totais e a linha de
+  // assinatura (A25:D25). Duas linhas na mesma célula: a de cima em destaque.
   try { nd.mergeCells('A25:D25'); } catch { /* já mesclado */ }
   const celulaVigencia = nd.getCell('A25');
-  celulaVigencia.value = textoVigencia(dataEmissao, precosValidosAte);
-  celulaVigencia.font = { name: 'Calibri', size: 8, italic: true };
+  celulaVigencia.value = {
+    richText: [
+      { font: { name: 'Calibri', size: 10.5, bold: true, color: { argb: 'FF8F1D1D' } }, text: AVISO_GARANTIA },
+      { font: { name: 'Calibri', size: 8, italic: true }, text: '\n' + textoVigencia(dataEmissao, precosValidosAte) },
+    ],
+  };
   celulaVigencia.alignment = { wrapText: true, vertical: 'top', horizontal: 'left' };
-  nd.getRow(25).height = 28;
+  nd.getRow(25).height = 42;
 
   // foto(s) do(s) item(ns) abaixo das assinaturas, pra conferência visual
   if (fotos && fotos.length) {
