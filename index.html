@@ -1425,7 +1425,10 @@ async function verificarSaldo(){
     const d = await res.json();
     if(!res.ok) throw new Error(d.error || 'Falha ao verificar o saldo.');
     const estouro = Object.entries(d.porCategoria || {}).find(([cat, v]) => qtdCarrinhoCategoria(cat) > v.disponivel);
-    if(d.disponivel <= 0){
+    // disponivel null = sem cota por pessoa. Sem esta guarda o `null <= 0` do
+    // JavaScript é verdadeiro e TODO MUNDO cai no "você já usou o limite".
+    const semCota = (d.disponivel === null || d.disponivel === undefined);
+    if(!semCota && d.disponivel <= 0){
       saldoDisponivel = 0;
       box.className = 'sim-box sim-warn';
       box.innerHTML = `🚫 <b>Você já usou o limite de ${d.limite} itens</b> (somando reservas e compras). Não é possível reservar. Dúvidas? Procure a TI.`;
@@ -1434,10 +1437,14 @@ async function verificarSaldo(){
       saldoDisponivel = 0;
       box.className = 'sim-box sim-warn';
       box.innerHTML = `⚠️ <b>Limite de ${v.limite} ${nomeCategoriaFront(cat, v.limite)} por pessoa</b>${v.usados ? ` (você já tem ${v.usados})` : ''} — assim mais colegas conseguem comprar. Esta reserva tem ${qtdCarrinhoCategoria(cat)}. <b>Ajuste o carrinho para continuar.</b>`;
-    } else if(qtd > d.disponivel){
+    } else if(!semCota && qtd > d.disponivel){
       saldoDisponivel = d.disponivel;
       box.className = 'sim-box sim-warn';
       box.innerHTML = `⚠️ Esta reserva tem <b>${qtd} itens</b>, mas você só pode comprar mais <b>${d.disponivel}</b> (limite de ${d.limite}; já usou ${d.usados}). <b>Ajuste o carrinho para continuar.</b>`;
+    } else if(semCota){
+      saldoDisponivel = Infinity;
+      box.className = 'sim-box sim-ok';
+      box.innerHTML = `✅ Esta reserva tem <b>${qtd} ${qtd === 1 ? 'item' : 'itens'}</b>${d.usados ? ` (você já comprou ${d.usados} antes)` : ''} — clique em "Continuar para pagamento".`;
     } else {
       saldoDisponivel = d.disponivel;
       box.className = 'sim-box sim-ok';
