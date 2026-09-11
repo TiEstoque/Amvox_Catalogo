@@ -60,7 +60,8 @@ export default async function handler(req, res) {
 
       const host = req.headers['x-forwarded-host'] || req.headers.host || 'amvox.vercel.app';
       const siteUrl = process.env.SITE_URL || `https://${host}`;
-      const conteudo = montarConteudo({ assunto, mensagem, siteUrl });
+      const vigencia = fmtVigencia(await vigenciaPrecos(supabase));
+      const conteudo = montarConteudo({ assunto, mensagem, siteUrl, vigencia });
 
       // ---- Teste: um único e-mail, pra conferir como ficou ----
       if (body.teste !== undefined) {
@@ -154,11 +155,40 @@ async function cpfsQueCompraram(supabase) {
   return new Set((data || []).map((c) => String(c.matricula || '').replace(/\D/g, '')).filter(Boolean));
 }
 
+// Vigência da tabela de preços (config_catalogo.precos_validos_ate): vai no
+// rodapé do e-mail, pra ninguém comprar achando que o valor muda no mesmo dia.
+async function vigenciaPrecos(supabase) {
+  const { data, error } = await supabase
+    .from('config_catalogo')
+    .select('valor')
+    .eq('chave', 'precos_validos_ate')
+    .maybeSingle();
+  if (error) throw error;
+  return (data && data.valor) || null;
+}
+
+// ISO -> "18/09/2026 às 17h00" (horário da Bahia).
+function fmtVigencia(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const f = new Intl.DateTimeFormat('pt-BR', {
+    timeZone: 'America/Bahia', day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).format(d);
+  const [data, hora] = f.split(', ');
+  return hora ? `${data} às ${hora.replace(':', 'h')}` : data;
+}
+
 // Texto simples -> versão texto (com o link no fim, se a mensagem não tiver)
 // e versão HTML com cabeçalho, parágrafos e botão pro catálogo.
-function montarConteudo({ assunto, mensagem, siteUrl }) {
+function montarConteudo({ assunto, mensagem, siteUrl, vigencia }) {
   const jaTemLink = /https?:\/\/\S+/i.test(mensagem);
-  const texto = jaTemLink ? mensagem : `${mensagem}\n\nAcesse o catálogo: ${siteUrl}`;
+  const avisoPrecos = vigencia
+    ? `Preços válidos até ${vigencia}. Após esse horário a tabela pode ser revisada sem aviso prévio. Ofertas válidas enquanto durar o estoque.`
+    : '';
+  const corpo = jaTemLink ? mensagem : `${mensagem}\n\nAcesse o catálogo: ${siteUrl}`;
+  const texto = avisoPrecos ? `${corpo}\n\n${avisoPrecos}` : corpo;
 
   const paragrafos = mensagem
     .split(/\n{2,}/)
@@ -180,6 +210,11 @@ function montarConteudo({ assunto, mensagem, siteUrl }) {
       <span style="font-size:12px;color:#777;">${escapeHtml(siteUrl)}</span>
     </p>
   </td></tr>
+  ${avisoPrecos ? `<tr><td style="padding:0 28px 18px 28px;">
+    <div style="border:1px solid #e3d4a8;background:#fdf7e6;border-radius:6px;padding:12px 14px;font-size:12.5px;color:#6b5a20;line-height:1.5;">
+      <b>Preços válidos até ${escapeHtml(vigencia)}.</b> Após esse horário a tabela pode ser revisada sem aviso prévio. Ofertas válidas enquanto durar o estoque.
+    </div>
+  </td></tr>` : ''}
   <tr><td style="padding:14px 28px;background:#f7f7f7;font-size:11px;color:#888;line-height:1.5;">
     Você está recebendo este e-mail porque tem cadastro no Catálogo de Vendas Internas da Amvox.
   </td></tr>

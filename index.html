@@ -56,6 +56,9 @@
   .aviso-horario{text-align:center;padding:8px 16px;font-size:13.5px;font-weight:700;letter-spacing:.2px;line-height:1.4;}
   .aviso-horario.aberto{background:#E8F5E9;color:#1B5E20;}
   .aviso-horario.fechado{background:#263238;color:#FFD98A;}
+  .aviso-precos{background:#FFF4D6;color:#6B5A20;border-bottom:1px solid #EBD9A3;text-align:center;padding:8px 16px;font-size:13.2px;font-weight:600;line-height:1.45;}
+  .aviso-precos b{font-weight:800;}
+  .aviso-precos.vencido{background:#FDECEC;color:#8F1D1D;border-bottom-color:#F0C9C9;}
   .cat-header{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:16px;}
   .cat-header h1{font-size:26px;margin:0 0 4px;}
   .cat-header p{margin:0;color:var(--ink-soft);font-size:13.5px;}
@@ -313,6 +316,7 @@
 
 <div class="aviso-funcionarios">⚠️ ATENÇÃO: a compra é <b>EXCLUSIVA para colaboradores ATIVOS da Amvox</b> — não é permitida a venda para terceiros.</div>
 <div id="avisoHorario" class="aviso-horario" hidden></div>
+<div id="avisoPrecos" class="aviso-precos" hidden></div>
 
 <div class="wrap">
 
@@ -739,8 +743,9 @@ function openTermosGate(e){
       <p><b style="color:var(--ink);">2. Dados coletados.</b> Nome, email e CPF são coletados para identificação do colaborador e vinculação das reservas realizadas, conforme a Lei Geral de Proteção de Dados Pessoais (Lei nº 13.709/2018).</p>
       <p><b style="color:var(--ink);">3. Reserva de itens.</b> Ao selecionar um item e abrir um chamado, o item fica automaticamente reservado, sujeito à disponibilidade em estoque no momento da confirmação.</p>
       <p><b style="color:var(--ink);">4. Pagamento.</b> O pagamento é feito via Pix no ato da reserva: você paga pela chave informada, anexa o comprovante e a Nota de Débito já fica disponível. Em seguida, abra o chamado no Gestão para o Faturamento — o setor Fiscal tem até 72 horas para a liberação; depois disso a TI confere e informa por e-mail o horário da retirada.</p>
-      <p><b style="color:var(--ink);">5. Cancelamento.</b> A empresa reserva-se o direito de cancelar reservas em caso de indisponibilidade do item ou inconsistência nos dados informados.</p>
-      <p><b style="color:var(--ink);">6. Responsabilidade.</b> As informações prestadas no momento da reserva (nome, CPF, setor) são de responsabilidade do colaborador e serão usadas para fins de identificação e cobrança.</p>
+      <p><b style="color:var(--ink);">5. Preços.</b> A tabela de preços do catálogo fica vigente até a data e hora informadas no aviso do topo da página. A partir desse horário os valores podem ser revisados sem aviso prévio, e as ofertas valem enquanto durar o estoque. As alterações não são retroativas: a compra já paga permanece pelo valor vigente na data da reserva, não havendo devolução, crédito ou complemento de diferença.</p>
+      <p><b style="color:var(--ink);">6. Cancelamento.</b> A empresa reserva-se o direito de cancelar reservas em caso de indisponibilidade do item ou inconsistência nos dados informados.</p>
+      <p><b style="color:var(--ink);">7. Responsabilidade.</b> As informações prestadas no momento da reserva (nome, CPF, setor) são de responsabilidade do colaborador e serão usadas para fins de identificação e cobrança.</p>
     </div>
     <div class="modal-foot"><button class="btn btn-primary" onclick="closeModal()">Entendi</button></div>
   `;
@@ -932,7 +937,12 @@ function atualizarTextoLimites(){
 async function atualizarLimiteReserva(){
   try{
     const resL = await fetch('/api/reservas?limites=1');
-    if(resL.ok){ const l = await resL.json(); limitesCategoria = l.porCategoria || {}; }
+    if(resL.ok){
+      const l = await resL.json();
+      limitesCategoria = l.porCategoria || {};
+      PRECOS_VALIDOS_ATE = l.precosValidosAte || null;
+      atualizarAvisoPrecos();
+    }
   }catch(err){ console.error('Erro ao consultar os limites', err); }
   atualizarTextoLimites();
   try{
@@ -1072,6 +1082,40 @@ function atualizarJanelaCompras(){
 }
 setInterval(atualizarJanelaCompras, 60*1000);
 atualizarJanelaCompras();
+
+/* ============ VIGÊNCIA DOS PREÇOS ============
+   Até a data/hora configurada no Painel a tabela de preços não muda; passando
+   disso, os valores podem ser revistos. É o que evita a confusão de comprar de
+   manhã e ver o preço menor à tarde. */
+let PRECOS_VALIDOS_ATE = null;   // ISO, vem de /api/reservas?limites=1
+
+function fmtVigencia(iso){
+  if(!iso) return '';
+  const d = new Date(iso);
+  if(isNaN(d.getTime())) return '';
+  const f = new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Bahia',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(d);
+  const [data, hora] = f.split(', ');
+  return hora ? `${data} às ${hora.replace(':','h')}` : data;
+}
+function vigenciaVencida(){
+  return !!PRECOS_VALIDOS_ATE && new Date(PRECOS_VALIDOS_ATE).getTime() <= Date.now();
+}
+function atualizarAvisoPrecos(){
+  const el = document.getElementById('avisoPrecos');
+  if(!el) return;
+  const txt = fmtVigencia(PRECOS_VALIDOS_ATE);
+  if(!txt){ el.hidden = true; return; }
+  el.hidden = false;
+  if(vigenciaVencida()){
+    el.className = 'aviso-precos vencido';
+    el.innerHTML = '\uD83D\uDCB2 A tabela de preços está <b>em revisão</b> — os valores podem mudar a qualquer momento. Ofertas válidas enquanto durar o estoque.';
+  } else {
+    el.className = 'aviso-precos';
+    el.innerHTML = `\uD83D\uDCB2 Preços válidos até <b>${esc(txt)}</b>. Depois desse horário a tabela pode ser revisada sem aviso prévio. Ofertas válidas enquanto durar o estoque.`;
+  }
+}
+setInterval(atualizarAvisoPrecos, 60*1000);
+
 
 function openReservaModal(){
   if(!dentroJanelaCompras()){
