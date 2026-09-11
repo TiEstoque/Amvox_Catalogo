@@ -436,6 +436,16 @@
 
       <!-- Sub: Catálogo -->
       <div id="admin-sub-catalogo" class="hidden">
+        <div class="form-card" id="historicoPrecosCard">
+          <h2>Histórico de preços <span id="historicoResumo" style="font-size:12.5px;font-weight:600;color:var(--ink-soft);"></span></h2>
+          <p>Toda alteração de preço fica registrada aqui com data e hora — de quanto para quanto, item por item. Serve pra responder cobrança de colaborador sem depender de memória. O registro é feito pelo banco, então pega qualquer alteração, venha do Painel ou não.</p>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px;">
+            <div class="search-box" style="max-width:300px;flex:1;"><input type="text" id="historicoBusca" placeholder="Buscar por número, título ou categoria..." oninput="renderHistoricoPrecos()"></div>
+            <button class="btn btn-outline btn-sm" onclick="carregarHistoricoPrecos(true)">Atualizar</button>
+          </div>
+          <div id="historicoLista"></div>
+        </div>
+
         <div class="form-card">
           <h2>Adicionar item</h2>
           <p>Preencha os dados do item novo. O número deve ser único (patrimônio, ID ou etiqueta).</p>
@@ -1804,6 +1814,7 @@ function switchAdminSub(name){
   document.querySelectorAll('.subtab-btn').forEach(b=>b.classList.toggle('active', b.dataset.sub===name));
   document.getElementById('admin-sub-chamados').classList.toggle('hidden', name!=='chamados');
   document.getElementById('admin-sub-catalogo').classList.toggle('hidden', name!=='catalogo');
+  if(name==='catalogo') carregarHistoricoPrecos();
   document.getElementById('admin-sub-liberacao').classList.toggle('hidden', name!=='liberacao');
   document.getElementById('admin-sub-vendidos').classList.toggle('hidden', name!=='vendidos');
   document.getElementById('admin-sub-usuarios').classList.toggle('hidden', name!=='usuarios');
@@ -2986,6 +2997,66 @@ function desenharUsuarios(){
    Lista de CPFs que podem se cadastrar (relação do RH + exceções da TI).
    Card na aba Usuários: colar CPFs, ver/desativar/remover. */
 let autorizadosCache = null;
+
+/* ============ HISTÓRICO DE PREÇOS (admin) ============
+   Log gravado por gatilho no banco (public.precos_historico): toda vez que o
+   preço de um item muda, fica registrado de quanto pra quanto e quando. */
+let historicoPrecosCache = null;
+
+async function carregarHistoricoPrecos(forcar){
+  const lista = document.getElementById('historicoLista');
+  if(!lista) return;
+  if(historicoPrecosCache && !forcar){ renderHistoricoPrecos(); return; }
+  lista.innerHTML = '<div class="empty">Carregando...</div>';
+  try{
+    const res = await fetch('/api/catalog?historico=1&limite=500', { headers: adminHeaders() });
+    const d = await res.json();
+    if(!res.ok) throw new Error(d.error || 'Falha ao carregar o histórico de preços.');
+    historicoPrecosCache = d.historico || [];
+    renderHistoricoPrecos();
+  }catch(err){
+    lista.innerHTML = `<div class="empty" style="color:var(--danger);">${esc(err.message)}</div>`;
+  }
+}
+
+function renderHistoricoPrecos(){
+  const lista = document.getElementById('historicoLista');
+  const resumo = document.getElementById('historicoResumo');
+  if(!lista || !historicoPrecosCache) return;
+  const termo = (document.getElementById('historicoBusca')?.value || '').trim().toLowerCase();
+  const linhas = historicoPrecosCache.filter(h => !termo
+    || String(h.numero||'').toLowerCase().includes(termo)
+    || String(h.titulo||'').toLowerCase().includes(termo)
+    || String(h.categoria||'').toLowerCase().includes(termo));
+  if(resumo) resumo.textContent = historicoPrecosCache.length
+    ? `· ${historicoPrecosCache.length} alteração(ões) registrada(s)${termo ? ` — ${linhas.length} na busca` : ''}`
+    : '· nenhuma alteração registrada ainda';
+  if(!historicoPrecosCache.length){
+    lista.innerHTML = '<div class="empty"><div class="big">📈</div>O registro começou agora — a próxima mudança de preço aparece aqui.</div>';
+    return;
+  }
+  if(!linhas.length){ lista.innerHTML = '<div class="empty">Nenhuma alteração encontrada nessa busca.</div>'; return; }
+  lista.innerHTML = linhas.map(h => {
+    const antigo = Number(h.preco_antigo);
+    const novo = Number(h.preco_novo);
+    const caiu = Number.isFinite(antigo) && Number.isFinite(novo) && novo < antigo;
+    const seta = caiu ? '↓' : '↑';
+    const cor = caiu ? 'var(--success)' : 'var(--danger)';
+    return `<div class="dp-row" style="padding:12px 14px;">
+      <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center;">
+        <div>
+          <div style="font-weight:700;font-size:13.5px;">${esc(h.titulo || h.item_id)}${h.numero ? ` <span style="color:var(--ink-soft);font-weight:600;">· nº ${esc(h.numero)}</span>` : ''}</div>
+          <div class="meta" style="margin-top:3px;">${esc(h.categoria || '—')} · ${new Date(h.alterado_em).toLocaleString('pt-BR')}</div>
+        </div>
+        <div style="font-weight:800;font-size:14px;white-space:nowrap;">
+          <span style="color:var(--ink-soft);text-decoration:line-through;">${brl(antigo)}</span>
+          <span style="color:${cor};margin:0 4px;">${seta}</span>
+          <span style="color:${cor};">${brl(novo)}</span>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
 
 /* ============ VIGÊNCIA DOS PREÇOS (admin) ============
    Data/hora até quando a tabela de preços vale. Guardada em

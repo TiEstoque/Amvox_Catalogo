@@ -10,6 +10,27 @@ export default async function handler(req, res) {
     const supabase = getSupabase();
 
     if (req.method === 'GET') {
+      // GET /api/catalog?historico=1[&busca=texto][&limite=N]
+      // -> log de alterações de preço (Painel; exige login de admin). O registro
+      //    é feito por gatilho no banco, então pega mudança feita por qualquer
+      //    caminho — Painel, API ou SQL direto.
+      if (req.query.historico) {
+        if (!requireAdmin(req, res)) return;
+        const limite = Math.min(Math.max(parseInt(req.query.limite, 10) || 200, 1), 500);
+        let consulta = supabase
+          .from('precos_historico')
+          .select('item_id, numero, titulo, categoria, preco_antigo, preco_novo, alterado_em')
+          .order('alterado_em', { ascending: false })
+          .limit(limite);
+        // vírgula e parênteses quebram a sintaxe do .or() do PostgREST
+        const busca = String(req.query.busca || '').trim().replace(/[,()*%]/g, '');
+        if (busca) {
+          consulta = consulta.or(`numero.ilike.%${busca}%,titulo.ilike.%${busca}%,categoria.ilike.%${busca}%`);
+        }
+        const { data, error } = await consulta;
+        if (error) throw error;
+        return res.status(200).json({ historico: data || [] });
+      }
       const { data: items, error: itemsErr } = await supabase
         .from('items')
         .select('*')
