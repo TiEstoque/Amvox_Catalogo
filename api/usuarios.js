@@ -11,6 +11,7 @@ import crypto from 'crypto';
 import { getSupabase } from './_supabase.js';
 import { requireAdmin } from './_admin.js';
 import { cpfsAutorizados, handleAutorizados } from './_autorizados.js';
+import { lerVigencia } from './_vigencia.js';
 
 function hashPassword(password) {
   const salt = crypto.randomBytes(16).toString('hex');
@@ -34,21 +35,25 @@ export default async function handler(req, res) {
     // POST ?recurso=limite { acao: 'zerar' }    -> só compras a partir de agora contam (segunda rodada)
     // POST ?recurso=limite { acao: 'restaurar' }-> volta a contar todas as compras
     // POST ?recurso=limite { acao: 'categorias', limites: {cat: n} } -> sublimites por categoria
-    // POST ?recurso=limite { acao: 'vigencia', valor: ISO|null } -> até quando os preços valem
+    // POST ?recurso=limite { acao: 'vigencia', modo: 'diario' } -> renova sozinha todo dia às 17h
+    // POST ?recurso=limite { acao: 'vigencia', valor: ISO|null } -> data fixa até quando os preços valem
     if (String(req.query.recurso || '') === 'limite') {
       if (req.method === 'GET') {
         const { data, error } = await supabase
           .from('config_catalogo')
           .select('chave, valor')
-          .in('chave', ['limite_desde', 'limites_categoria', 'precos_validos_ate']);
+          .in('chave', ['limite_desde', 'limites_categoria']);
         if (error) throw error;
         const cfg = Object.fromEntries((data || []).map((r) => [r.chave, r.valor]));
+        const vigencia = await lerVigencia(supabase);
         let limitesCategoria = {};
         try { limitesCategoria = cfg.limites_categoria ? JSON.parse(cfg.limites_categoria) : {}; } catch { limitesCategoria = {}; }
         return res.status(200).json({
           limiteDesde: cfg.limite_desde || null,
           limitesCategoria,
-          precosValidosAte: cfg.precos_validos_ate || null,
+          precosValidosAte: vigencia.precosValidosAte,
+          precosVigenciaModo: vigencia.modo,
+          precosDataFixa: vigencia.dataFixa,
         });
       }
       if (req.method === 'POST') {
@@ -81,18 +86,33 @@ export default async function handler(req, res) {
         // -> até quando a tabela de preços vale. Aparece no aviso do topo do
         //    catálogo e no rodapé do e-mail de promoção. Vazio = sem prazo.
         if (acao === 'vigencia') {
+          const modo = String(body.modo || '') === 'diario' ? 'diario' : 'fixa';
           const bruto = body.valor === null || body.valor === undefined || String(body.valor).trim() === ''
             ? null
             : String(body.valor).trim();
-          if (bruto !== null && Number.isNaN(Date.parse(bruto))) {
+          if (modo === 'fixa' && bruto !== null && Number.isNaN(Date.parse(bruto))) {
             return res.status(400).json({ error: 'Data de vigência inválida.' });
           }
-          const valor = bruto === null ? null : new Date(bruto).toISOString();
+          const registros = [
+            { chave: 'precos_vigencia_modo', valor: modo === 'diario' ? 'diario' : null },
+          ];
+          // No modo diário a data guardada não é usada, mas fica preservada
+          // pra quem voltar pro modo fixo não perder o que tinha configurado.
+          if (modo === 'fixa') {
+            registros.push({ chave: 'precos_validos_ate', valor: bruto === null ? null : new Date(bruto).toISOString() });
+          }
+          const agora = new Date().toISOString();
           const { error } = await supabase
             .from('config_catalogo')
-            .upsert({ chave: 'precos_validos_ate', valor, atualizado_em: new Date().toISOString(), atualizado_por: 'Painel' }, { onConflict: 'chave' });
+            .upsert(registros.map((r) => ({ ...r, atualizado_em: agora, atualizado_por: 'Painel' })), { onConflict: 'chave' });
           if (error) throw error;
-          return res.status(200).json({ ok: true, precosValidosAte: valor });
+          const vigencia = await lerVigencia(supabase);
+          return res.status(200).json({
+            ok: true,
+            precosValidosAte: vigencia.precosValidosAte,
+            precosVigenciaModo: vigencia.modo,
+            precosDataFixa: vigencia.dataFixa,
+          });
         }
 
         if (acao !== 'zerar' && acao !== 'restaurar') return res.status(400).json({ error: 'Ação inválida.' });

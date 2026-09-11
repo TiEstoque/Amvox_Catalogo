@@ -24,6 +24,7 @@ import { getSupabase } from './_supabase.js';
 import { requireAdmin } from './_admin.js';
 import { enviarEmail, emailConfigurado } from './_email.js';
 import { cpfsAutorizados } from './_autorizados.js';
+import { vigenciaAtual } from './_vigencia.js';
 
 const LOTE_MAX = 20;      // destinatários por chamada
 const PARALELOS = 5;      // envios simultâneos (Gmail não gosta de muitos de uma vez)
@@ -60,7 +61,7 @@ export default async function handler(req, res) {
 
       const host = req.headers['x-forwarded-host'] || req.headers.host || 'amvox.vercel.app';
       const siteUrl = process.env.SITE_URL || `https://${host}`;
-      const vigencia = fmtVigencia(await vigenciaPrecos(supabase));
+      const vigencia = fmtVigencia(await vigenciaAtual(supabase));
       const conteudo = montarConteudo({ assunto, mensagem, siteUrl, vigencia });
 
       // ---- Teste: um único e-mail, pra conferir como ficou ----
@@ -153,18 +154,6 @@ async function cpfsQueCompraram(supabase) {
     .not('status', 'in', '("Cancelado","Reprovado pelo DP")');
   if (error) throw error;
   return new Set((data || []).map((c) => String(c.matricula || '').replace(/\D/g, '')).filter(Boolean));
-}
-
-// Vigência da tabela de preços (config_catalogo.precos_validos_ate): vai no
-// rodapé do e-mail, pra ninguém comprar achando que o valor muda no mesmo dia.
-async function vigenciaPrecos(supabase) {
-  const { data, error } = await supabase
-    .from('config_catalogo')
-    .select('valor')
-    .eq('chave', 'precos_validos_ate')
-    .maybeSingle();
-  if (error) throw error;
-  return (data && data.valor) || null;
 }
 
 // ISO -> "18/09/2026 às 17h00" (horário da Bahia).

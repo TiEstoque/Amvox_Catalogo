@@ -9,6 +9,7 @@
 import { getSupabase } from '../_supabase.js';
 import { requireAdmin } from '../_admin.js';
 import { gerarNdEEmail, enviarAvisoFiscal } from '../_concluir.js';
+import { vigenciaAtual } from '../_vigencia.js';
 
 export const config = {
   api: {
@@ -36,19 +37,6 @@ async function limiteDesde(supabase) {
   if (error) throw error;
   const v = data && data.valor ? new Date(data.valor) : null;
   return v && !isNaN(v.getTime()) ? v : null;
-}
-
-// Vigência da tabela de preços (config_catalogo.precos_validos_ate, ISO).
-// Até essa data/hora os valores não mudam; depois dela a tabela pode ser
-// revista. Sai no aviso do topo do catálogo e no rodapé do e-mail de promoção.
-async function precosValidosAte(supabase) {
-  const { data, error } = await supabase
-    .from('config_catalogo')
-    .select('valor')
-    .eq('chave', 'precos_validos_ate')
-    .maybeSingle();
-  if (error) throw error;
-  return (data && data.valor) || null;
 }
 
 // Sublimites por categoria (config_catalogo.limites_categoria, JSON como
@@ -108,7 +96,7 @@ export default async function handler(req, res) {
       // GET /api/reservas?limites=1 -> regras públicas (limite padrão e
       // sublimites por categoria), usadas pelo carrinho antes do login.
       if (req.query.limites) {
-        const [porCategoria, precosAte] = await Promise.all([limitesCategoria(supabase), precosValidosAte(supabase)]);
+        const [porCategoria, precosAte] = await Promise.all([limitesCategoria(supabase), vigenciaAtual(supabase)]);
         return res.status(200).json({ limitePadrao: LIMITE_PADRAO, porCategoria, precosValidosAte: precosAte });
       }
 

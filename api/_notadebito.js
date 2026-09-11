@@ -60,7 +60,10 @@ function fmtDataHoraBahia(d) {
 function textoVigencia(dataEmissao, precosValidosAte) {
   const dia = fmtDataBahia(dataEmissao);
   const ate = precosValidosAte ? new Date(precosValidosAte) : null;
-  const publicada = ate && !Number.isNaN(ate.getTime())
+  const temAte = ate && !Number.isNaN(ate.getTime());
+  // Se a validade cai no próprio dia da compra (modo diário), o parênteses
+  // só repetiria a mesma informação — então não entra.
+  const publicada = temAte && fmtDataBahia(ate) !== dia
     ? ` (tabela publicada com validade até ${fmtDataHoraBahia(ate)})`
     : '';
   return `Preço praticado conforme a tabela do Catálogo de Vendas Internas vigente em ${dia}, `

@@ -491,9 +491,16 @@
 
         <div class="form-card" id="vigenciaCard">
           <h2>Vigência dos preços <span id="vigenciaResumo" style="font-size:12.5px;font-weight:600;color:var(--ink-soft);"></span></h2>
-          <p>Até a data e hora abaixo os preços do catálogo <b>não mudam</b> — o aviso aparece no topo do site e no rodapé do e-mail de promoção. Só mexa nos valores depois desse horário e já publique a data seguinte: assim ninguém compra de manhã e vê o preço menor à tarde. Em branco = sem prazo (o aviso some).</p>
+          <p>Até o horário informado os preços do catálogo <b>não mudam</b> — o aviso aparece no topo do site, no rodapé do e-mail de promoção e na Nota de Débito que a pessoa assina. No modo automático a data vira sozinha todo dia: a tabela vale das 07h00 às 17h00 e, depois das 17h, o site avisa que está em revisão — que é quando você mexe nos preços.</p>
           <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
             <label style="font-size:12.5px;font-weight:600;color:var(--ink-soft);display:flex;flex-direction:column;gap:4px;">
+              Como renova
+              <select id="vigenciaModo" onchange="aoMudarModoVigencia()" style="border:1px solid var(--line);border-radius:9px;padding:8px 10px;font-family:'IBM Plex Sans';font-size:13px;">
+                <option value="diario">Automático — todo dia até as 17h00</option>
+                <option value="fixa">Data fixa</option>
+              </select>
+            </label>
+            <label id="vigenciaDataLabel" style="font-size:12.5px;font-weight:600;color:var(--ink-soft);display:flex;flex-direction:column;gap:4px;">
               Preços válidos até
               <input type="datetime-local" id="vigenciaInput" style="border:1px solid var(--line);border-radius:9px;padding:8px 10px;font-family:'IBM Plex Sans';font-size:13px;">
             </label>
@@ -1114,6 +1121,14 @@ function fmtVigencia(iso){
 function vigenciaVencida(){
   return !!PRECOS_VALIDOS_ATE && new Date(PRECOS_VALIDOS_ATE).getTime() <= Date.now();
 }
+function ehHojeBahia(iso){
+  const f = new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Bahia',day:'2-digit',month:'2-digit',year:'numeric'});
+  return f.format(new Date(iso)) === f.format(new Date());
+}
+function horaVigencia(iso){
+  return new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Bahia',hour:'2-digit',minute:'2-digit',hourCycle:'h23'})
+    .format(new Date(iso)).replace(':','h');
+}
 function atualizarAvisoPrecos(){
   const el = document.getElementById('avisoPrecos');
   if(!el) return;
@@ -1125,7 +1140,10 @@ function atualizarAvisoPrecos(){
     el.innerHTML = '\uD83D\uDCB2 A tabela de preços está <b>em revisão</b> — os valores podem mudar a qualquer momento. Ofertas válidas enquanto durar o estoque.';
   } else {
     el.className = 'aviso-precos';
-    el.innerHTML = `\uD83D\uDCB2 Preços válidos até <b>${esc(txt)}</b>. Depois desse horário a tabela pode ser revisada sem aviso prévio. Ofertas válidas enquanto durar o estoque.`;
+    const quando = ehHojeBahia(PRECOS_VALIDOS_ATE)
+      ? `hoje até as ${horaVigencia(PRECOS_VALIDOS_ATE)}`
+      : `até ${esc(txt)}`;
+    el.innerHTML = `\uD83D\uDCB2 Preços válidos <b>${quando}</b>. Depois desse horário a tabela pode ser revisada sem aviso prévio. Ofertas válidas enquanto durar o estoque.`;
   }
 }
 setInterval(atualizarAvisoPrecos, 60*1000);
@@ -2984,39 +3002,56 @@ function inputBahiaParaIso(v){
   const d = new Date(base + ':00-03:00');   // Bahia não tem horário de verão
   return isNaN(d.getTime()) ? null : d.toISOString();
 }
-function pintarVigencia(iso){
+function aoMudarModoVigencia(){
+  const sel = document.getElementById('vigenciaModo');
+  const lbl = document.getElementById('vigenciaDataLabel');
+  if(lbl) lbl.style.display = (sel && sel.value === 'diario') ? 'none' : '';
+}
+function pintarVigencia(iso, modo, dataFixa){
   const inp = document.getElementById('vigenciaInput');
+  const sel = document.getElementById('vigenciaModo');
   const resumo = document.getElementById('vigenciaResumo');
-  if(inp) inp.value = isoParaInputBahia(iso);
+  if(sel && modo) sel.value = modo === 'diario' ? 'diario' : 'fixa';
+  if(inp) inp.value = isoParaInputBahia(dataFixa !== undefined ? dataFixa : iso);
+  aoMudarModoVigencia();
   if(resumo){
     const txt = fmtVigencia(iso);
-    if(!txt) resumo.textContent = '· sem prazo definido';
-    else resumo.textContent = vigenciaVencida() ? `· venceu em ${txt} — publique a nova data` : `· válidos até ${txt}`;
+    if(!txt){ resumo.textContent = '· sem prazo definido'; return; }
+    const automatico = modo === 'diario' ? ' (renova sozinha todo dia)' : '';
+    resumo.textContent = vigenciaVencida()
+      ? (modo === 'diario' ? `· em revisão desde as 17h00 — volta a valer amanhã` : `· venceu em ${txt} — publique a nova data`)
+      : `· válidos até ${txt}${automatico}`;
   }
 }
 async function salvarVigenciaPrecos(){
+  const sel = document.getElementById('vigenciaModo');
+  const modo = sel && sel.value === 'fixa' ? 'fixa' : 'diario';
+  if(modo === 'diario'){
+    await postVigenciaPrecos({ modo: 'diario' }, 'Vigência automática ligada — a data vira sozinha todo dia. ✓');
+    return;
+  }
   const inp = document.getElementById('vigenciaInput');
   const iso = inputBahiaParaIso(inp && inp.value);
   if(!iso){ showToast('Escolha a data e a hora da vigência.'); return; }
-  await postVigenciaPrecos(iso, 'Vigência dos preços salva. ✓');
+  await postVigenciaPrecos({ modo: 'fixa', valor: iso }, 'Vigência dos preços salva. ✓');
 }
 async function limparVigenciaPrecos(){
-  if(!confirm('Tirar o prazo de vigência?\n\nO aviso de "preços válidos até..." some do catálogo e do e-mail de promoção.')) return;
-  await postVigenciaPrecos(null, 'Vigência removida. ✓');
+  if(!confirm('Tirar o prazo de vigência?\n\nO aviso de "preços válidos até..." some do catálogo, do e-mail de promoção e da Nota de Débito.')) return;
+  await postVigenciaPrecos({ modo: 'fixa', valor: null }, 'Vigência removida. ✓');
 }
-async function postVigenciaPrecos(valor, okMsg){
+async function postVigenciaPrecos(corpo, okMsg){
   const btn = document.getElementById('vigenciaBtn');
   const msg = document.getElementById('vigenciaMsg');
   if(btn) btn.disabled = true;
   if(msg) msg.textContent = 'Salvando...';
   try{
     const res = await fetch('/api/usuarios?recurso=limite', {
-      method:'POST', headers: adminHeaders({'Content-Type':'application/json'}), body: JSON.stringify({ acao: 'vigencia', valor })
+      method:'POST', headers: adminHeaders({'Content-Type':'application/json'}), body: JSON.stringify(Object.assign({ acao: 'vigencia' }, corpo))
     });
     const d = await res.json();
     if(!res.ok) throw new Error(d.error || 'Falha ao salvar a vigência.');
     PRECOS_VALIDOS_ATE = d.precosValidosAte || null;
-    pintarVigencia(PRECOS_VALIDOS_ATE);
+    pintarVigencia(PRECOS_VALIDOS_ATE, d.precosVigenciaModo, d.precosDataFixa);
     atualizarAvisoPrecos();
     if(msg) msg.textContent = '';
     showToast(okMsg);
@@ -3039,7 +3074,7 @@ async function carregarContagemLimite(){
     const desde = d.limiteDesde ? new Date(d.limiteDesde) : null;
     desenharLimitesCategoria(d.limitesCategoria || {});
     PRECOS_VALIDOS_ATE = d.precosValidosAte || null;
-    pintarVigencia(PRECOS_VALIDOS_ATE);
+    pintarVigencia(PRECOS_VALIDOS_ATE, d.precosVigenciaModo, d.precosDataFixa);
     atualizarAvisoPrecos();
     document.getElementById('limiteBtnRestaurar').classList.toggle('hidden', !desde);
     document.getElementById('limiteResumo').textContent = desde ? `· contando desde ${desde.toLocaleString('pt-BR')}` : '· contando todas as compras';

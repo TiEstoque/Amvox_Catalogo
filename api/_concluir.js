@@ -11,22 +11,14 @@
 
 import { gerarNotaDebito, formatarCpf } from './_notadebito.js';
 import { enviarEmail, emailConfigurado } from './_email.js';
+// A validade da tabela de preços no momento da emissão fica gravada na
+// própria nota (notas_debito.precos_validos_ate), pra que uma ND regerada
+// meses depois mostre a vigência do dia da compra, não a de hoje.
+import { vigenciaAtual } from './_vigencia.js';
 
 const EMAIL_NOTAS = process.env.EMAIL_NOTAS_DESTINO || 'entradanotasfiscais@amvox.com.br';
 
 // Descrição e foto dos itens (pro corpo da ND e conferência visual).
-// Validade da tabela de preços no momento da emissão. Fica gravada na
-// própria nota (notas_debito.precos_validos_ate) pra que uma ND regerada
-// meses depois continue mostrando a vigência que valia no dia da compra.
-async function vigenciaPrecos(supabase) {
-  const { data } = await supabase
-    .from('config_catalogo')
-    .select('valor')
-    .eq('chave', 'precos_validos_ate')
-    .maybeSingle();
-  return (data && data.valor) || null;
-}
-
 async function montarDadosNd(supabase, itens) {
   const ids = [...new Set(itens.map((it) => it.item_id).filter(Boolean))];
   const infoPorId = {};
@@ -138,7 +130,7 @@ export async function gerarNdEEmail({ supabase, chamado, itens }) {
 
   try {
     const { itensNd, fotos } = await montarDadosNd(supabase, itens);
-    const precosValidosAte = await vigenciaPrecos(supabase);
+    const precosValidosAte = await vigenciaAtual(supabase);
 
     const dataEmissao = new Date();
     const { numero, buffer } = await gerarNotaDebito({
