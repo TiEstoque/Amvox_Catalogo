@@ -489,6 +489,20 @@
           <div class="search-box" style="max-width:280px;"><input type="text" id="userSearch" placeholder="Buscar por nome, email ou CPF..."></div>
         </div>
 
+        <div class="form-card" id="vigenciaCard">
+          <h2>Vigência dos preços <span id="vigenciaResumo" style="font-size:12.5px;font-weight:600;color:var(--ink-soft);"></span></h2>
+          <p>Até a data e hora abaixo os preços do catálogo <b>não mudam</b> — o aviso aparece no topo do site e no rodapé do e-mail de promoção. Só mexa nos valores depois desse horário e já publique a data seguinte: assim ninguém compra de manhã e vê o preço menor à tarde. Em branco = sem prazo (o aviso some).</p>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+            <label style="font-size:12.5px;font-weight:600;color:var(--ink-soft);display:flex;flex-direction:column;gap:4px;">
+              Preços válidos até
+              <input type="datetime-local" id="vigenciaInput" style="border:1px solid var(--line);border-radius:9px;padding:8px 10px;font-family:'IBM Plex Sans';font-size:13px;">
+            </label>
+            <button class="btn btn-primary btn-sm" id="vigenciaBtn" style="white-space:nowrap;" onclick="salvarVigenciaPrecos()">Salvar vigência</button>
+            <button class="btn btn-outline btn-sm" onclick="limparVigenciaPrecos()">Sem prazo</button>
+            <span id="vigenciaMsg" style="font-size:12.5px;color:var(--ink-soft);"></span>
+          </div>
+        </div>
+
         <div class="form-card" id="limiteCard">
           <h2>Limite de itens por pessoa <span id="limiteResumo" style="font-size:12.5px;font-weight:600;color:var(--ink-soft);"></span></h2>
           <p id="limiteTexto">Cada pessoa pode comprar até 6 itens (ou o limite individual liberado no botão "Limite" de cada usuário), somando reservas e compras. Carregando...</p>
@@ -2955,6 +2969,65 @@ function desenharUsuarios(){
    Card na aba Usuários: colar CPFs, ver/desativar/remover. */
 let autorizadosCache = null;
 
+/* ============ VIGÊNCIA DOS PREÇOS (admin) ============
+   Data/hora até quando a tabela de preços vale. Guardada em
+   config_catalogo.precos_validos_ate e mostrada na faixa do topo do catálogo. */
+function isoParaInputBahia(iso){
+  if(!iso) return '';
+  const d = new Date(iso);
+  if(isNaN(d.getTime())) return '';
+  return new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Bahia',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(d).replace(' ','T');
+}
+function inputBahiaParaIso(v){
+  const base = String(v || '').trim().slice(0,16);
+  if(base.length !== 16) return null;
+  const d = new Date(base + ':00-03:00');   // Bahia não tem horário de verão
+  return isNaN(d.getTime()) ? null : d.toISOString();
+}
+function pintarVigencia(iso){
+  const inp = document.getElementById('vigenciaInput');
+  const resumo = document.getElementById('vigenciaResumo');
+  if(inp) inp.value = isoParaInputBahia(iso);
+  if(resumo){
+    const txt = fmtVigencia(iso);
+    if(!txt) resumo.textContent = '· sem prazo definido';
+    else resumo.textContent = vigenciaVencida() ? `· venceu em ${txt} — publique a nova data` : `· válidos até ${txt}`;
+  }
+}
+async function salvarVigenciaPrecos(){
+  const inp = document.getElementById('vigenciaInput');
+  const iso = inputBahiaParaIso(inp && inp.value);
+  if(!iso){ showToast('Escolha a data e a hora da vigência.'); return; }
+  await postVigenciaPrecos(iso, 'Vigência dos preços salva. ✓');
+}
+async function limparVigenciaPrecos(){
+  if(!confirm('Tirar o prazo de vigência?\n\nO aviso de "preços válidos até..." some do catálogo e do e-mail de promoção.')) return;
+  await postVigenciaPrecos(null, 'Vigência removida. ✓');
+}
+async function postVigenciaPrecos(valor, okMsg){
+  const btn = document.getElementById('vigenciaBtn');
+  const msg = document.getElementById('vigenciaMsg');
+  if(btn) btn.disabled = true;
+  if(msg) msg.textContent = 'Salvando...';
+  try{
+    const res = await fetch('/api/usuarios?recurso=limite', {
+      method:'POST', headers: adminHeaders({'Content-Type':'application/json'}), body: JSON.stringify({ acao: 'vigencia', valor })
+    });
+    const d = await res.json();
+    if(!res.ok) throw new Error(d.error || 'Falha ao salvar a vigência.');
+    PRECOS_VALIDOS_ATE = d.precosValidosAte || null;
+    pintarVigencia(PRECOS_VALIDOS_ATE);
+    atualizarAvisoPrecos();
+    if(msg) msg.textContent = '';
+    showToast(okMsg);
+  }catch(err){
+    if(msg) msg.textContent = '';
+    showToast(err.message || 'Falha ao salvar a vigência.');
+  }finally{
+    if(btn) btn.disabled = false;
+  }
+}
+
 /* ============ CONTAGEM DO LIMITE (segunda rodada) ============ */
 async function carregarContagemLimite(){
   const txt = document.getElementById('limiteTexto');
@@ -2965,6 +3038,9 @@ async function carregarContagemLimite(){
     if(!res.ok) throw new Error(d.error || 'Falha ao consultar a contagem do limite.');
     const desde = d.limiteDesde ? new Date(d.limiteDesde) : null;
     desenharLimitesCategoria(d.limitesCategoria || {});
+    PRECOS_VALIDOS_ATE = d.precosValidosAte || null;
+    pintarVigencia(PRECOS_VALIDOS_ATE);
+    atualizarAvisoPrecos();
     document.getElementById('limiteBtnRestaurar').classList.toggle('hidden', !desde);
     document.getElementById('limiteResumo').textContent = desde ? `· contando desde ${desde.toLocaleString('pt-BR')}` : '· contando todas as compras';
     txt.innerHTML = desde
