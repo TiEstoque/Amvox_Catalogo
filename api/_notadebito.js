@@ -37,6 +37,37 @@ function montarItens(itensChamado, valorTotal) {
   ];
 }
 
+// Vigência do preço impressa na nota, logo acima das assinaturas. Como o
+// pagador assina a via, a ND vira a prova de qual tabela de preços valia no
+// dia da compra — e de que reajuste posterior não mexe no que ele pagou.
+const JANELA_PRECOS = { inicio: '07h00', fim: '17h00' };
+
+function fmtDataBahia(d) {
+  return new Intl.DateTimeFormat('pt-BR', {
+    timeZone: 'America/Bahia', day: '2-digit', month: '2-digit', year: 'numeric',
+  }).format(d);
+}
+
+function fmtDataHoraBahia(d) {
+  const f = new Intl.DateTimeFormat('pt-BR', {
+    timeZone: 'America/Bahia', day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).format(d);
+  const [data, hora] = f.split(', ');
+  return hora ? `${data} às ${hora.replace(':', 'h')}` : data;
+}
+
+function textoVigencia(dataEmissao, precosValidosAte) {
+  const dia = fmtDataBahia(dataEmissao);
+  const ate = precosValidosAte ? new Date(precosValidosAte) : null;
+  const publicada = ate && !Number.isNaN(ate.getTime())
+    ? ` (tabela publicada com validade até ${fmtDataHoraBahia(ate)})`
+    : '';
+  return `Preço praticado conforme a tabela do Catálogo de Vendas Internas vigente em ${dia}, `
+    + `das ${JANELA_PRECOS.inicio} às ${JANELA_PRECOS.fim}${publicada}. `
+    + `Alterações de preço posteriores não são retroativas: esta Nota de Débito permanece pelo valor acima.`;
+}
+
 // CPF entra na nota formatado (000.000.000-00); se vier em formato
 // inesperado, mantém como foi digitado pra não perder o dado.
 export function formatarCpf(cpf) {
@@ -45,7 +76,7 @@ export function formatarCpf(cpf) {
   return `${digitos.slice(0, 3)}.${digitos.slice(3, 6)}.${digitos.slice(6, 9)}-${digitos.slice(9)}`;
 }
 
-export async function gerarNotaDebito({ protocolo, pagador, cpf, valorTotal, itens, dataEmissao, getNumeroNd, fotos = [] }) {
+export async function gerarNotaDebito({ protocolo, pagador, cpf, valorTotal, itens, dataEmissao, getNumeroNd, fotos = [], precosValidosAte = null }) {
   const wb = new ExcelJS.Workbook();
   const buffer = Buffer.from(ND_TEMPLATE_BASE64, 'base64');
   await wb.xlsx.load(buffer);
@@ -110,6 +141,14 @@ export async function gerarNotaDebito({ protocolo, pagador, cpf, valorTotal, ite
       nd.getRow(r).height = Math.max(nd.getRow(r).height || 15, 42);
     }
   });
+
+  // Vigência do preço, entre os totais e a linha de assinatura (A25:D25).
+  try { nd.mergeCells('A25:D25'); } catch { /* já mesclado */ }
+  const celulaVigencia = nd.getCell('A25');
+  celulaVigencia.value = textoVigencia(dataEmissao, precosValidosAte);
+  celulaVigencia.font = { name: 'Calibri', size: 8, italic: true };
+  celulaVigencia.alignment = { wrapText: true, vertical: 'top', horizontal: 'left' };
+  nd.getRow(25).height = 28;
 
   // foto(s) do(s) item(ns) abaixo das assinaturas, pra conferência visual
   if (fotos && fotos.length) {

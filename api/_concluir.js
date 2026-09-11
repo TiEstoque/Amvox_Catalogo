@@ -15,6 +15,18 @@ import { enviarEmail, emailConfigurado } from './_email.js';
 const EMAIL_NOTAS = process.env.EMAIL_NOTAS_DESTINO || 'entradanotasfiscais@amvox.com.br';
 
 // Descrição e foto dos itens (pro corpo da ND e conferência visual).
+// Validade da tabela de preços no momento da emissão. Fica gravada na
+// própria nota (notas_debito.precos_validos_ate) pra que uma ND regerada
+// meses depois continue mostrando a vigência que valia no dia da compra.
+async function vigenciaPrecos(supabase) {
+  const { data } = await supabase
+    .from('config_catalogo')
+    .select('valor')
+    .eq('chave', 'precos_validos_ate')
+    .maybeSingle();
+  return (data && data.valor) || null;
+}
+
 async function montarDadosNd(supabase, itens) {
   const ids = [...new Set(itens.map((it) => it.item_id).filter(Boolean))];
   const infoPorId = {};
@@ -91,6 +103,7 @@ export async function regerarNotaDebito({ supabase, protocolo }) {
     itens: itensNd,
     fotos,
     dataEmissao,
+    precosValidosAte: nota.precos_validos_ate || null,
     getNumeroNd: async () => ({ numero: numeroExistente, sequencial }),
   });
 
@@ -125,6 +138,7 @@ export async function gerarNdEEmail({ supabase, chamado, itens }) {
 
   try {
     const { itensNd, fotos } = await montarDadosNd(supabase, itens);
+    const precosValidosAte = await vigenciaPrecos(supabase);
 
     const dataEmissao = new Date();
     const { numero, buffer } = await gerarNotaDebito({
@@ -135,6 +149,7 @@ export async function gerarNdEEmail({ supabase, chamado, itens }) {
       itens: itensNd,
       fotos,
       dataEmissao,
+      precosValidosAte,
       getNumeroNd: async (ano) => {
         const { data: seqData, error: seqErr } = await supabase.rpc('proximo_numero_nd');
         if (seqErr) throw seqErr;
@@ -162,6 +177,7 @@ export async function gerarNdEEmail({ supabase, chamado, itens }) {
       valor: Number(chamado.valor_total),
       data_emissao: dataEmissao.toISOString().slice(0, 10),
       arquivo_path: arquivoPath,
+      precos_validos_ate: precosValidosAte,
     });
 
     // E-mail com ND + comprovante — falha aqui não desfaz nada, só loga.
