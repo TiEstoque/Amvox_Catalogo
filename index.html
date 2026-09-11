@@ -1021,12 +1021,14 @@ function atualizarTextoLimites(){
 
   const titulo = document.getElementById('cardLimiteTitulo');
   if(titulo) titulo.textContent = semLimite
-    ? 'Compre quantos itens quiser'
+    ? 'Escolha seus itens'
     : `Até ${LIMITE_PADRAO_CAT} ${LIMITE_PADRAO_CAT === 1 ? 'item' : 'itens'} por pessoa`;
 
+  // Sem cota, o card não anuncia "compre quantos quiser": chamar atenção pra
+  // ausência de limite é convite pra alguém levar o estoque inteiro.
   const texto = document.getElementById('cardLimiteTexto');
   if(texto) texto.innerHTML = semLimite
-    ? `Não tem limite de itens por pessoa${regra ? ` — ${regra}` : ''}. Escolha tudo o que quiser e finalize numa reserva só. Depois, não esqueça de abrir o chamado no Gestão.`
+    ? `Escolha seus itens${regra ? ` (${regra})` : ''} e finalize numa reserva só. Depois, não esqueça de abrir o chamado no Gestão.`
     : `Escolha seus itens (máximo de <b>${LIMITE_PADRAO_CAT} por pessoa</b>, somando reservas e compras anteriores${regra ? `; ${regra}` : ''}) e finalize numa reserva só. Depois, não esqueça de abrir o chamado no Gestão.`;
 
   atualizarAvisoCategoria();
