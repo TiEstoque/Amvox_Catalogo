@@ -1041,10 +1041,11 @@ const overlay = document.getElementById('modalOverlay');
 const modalContent = document.getElementById('modalContent');
 let currentPagamento = null;
 
-// Janela de compras (horário da Bahia), todos os dias. A trava de verdade
-// fica no servidor (POST /api/reservas) — aqui é só o aviso e o bloqueio do
-// botão. Pra mudar o horário, ajuste aqui e em api/reservas/index.js.
-const JANELA_COMPRAS = { inicio: '07:08', fim: '17:08' };
+// Janela de compras (horário da Bahia). DESLIGADA: o catálogo aceita reservas
+// a qualquer hora. Pra voltar a limitar, troque null por
+// { inicio: '07:08', fim: '17:08' } aqui e ponha JANELA_ATIVA = true em
+// api/reservas/index.js.
+const JANELA_COMPRAS = null;
 function minutosDe(hhmm){ const [h,m] = hhmm.split(':').map(Number); return h*60+m; }
 function horaMinutoBahia(){
   const [h,m] = new Intl.DateTimeFormat('en-US',{timeZone:'America/Bahia',hour:'numeric',minute:'numeric',hourCycle:'h23'})
@@ -1052,12 +1053,14 @@ function horaMinutoBahia(){
   return h*60+m;
 }
 function dentroJanelaCompras(){
+  if(!JANELA_COMPRAS) return true;   // sem restrição de horário
   const m = horaMinutoBahia();
   return m >= minutosDe(JANELA_COMPRAS.inicio) && m < minutosDe(JANELA_COMPRAS.fim);
 }
 function atualizarJanelaCompras(){
   const el = document.getElementById('avisoHorario');
   if(!el) return;
+  if(!JANELA_COMPRAS){ el.hidden = true; return; }   // sem faixa de horário
   el.hidden = false;
   if(dentroJanelaCompras()){
     el.className = 'aviso-horario aberto';
@@ -2386,7 +2389,7 @@ function modeloSemCompra(){
     `São equipamentos usados, da própria Amvox, e a condição de cada um está descrita no catálogo. Cada colaborador pode comprar até 6 itens${descreverLimitesCat(limitesCategoria) ? ` (no máximo ${descreverLimitesCat(limitesCategoria)})` : ''}.`,
     '',
     'Como funciona:',
-    `1. Acesse o catálogo (compras todos os dias das ${JANELA_COMPRAS.inicio} às ${JANELA_COMPRAS.fim}), entre com seu cadastro e escolha os itens.`,
+    `1. Acesse o catálogo${JANELA_COMPRAS ? ` (compras todos os dias das ${JANELA_COMPRAS.inicio} às ${JANELA_COMPRAS.fim})` : ''}, entre com seu cadastro e escolha os itens.`,
     '2. O pagamento é por Pix na hora da reserva: pague, anexe o comprovante e a Nota de Débito sai na hora.',
     '3. Depois, abra o chamado no Gestão. O Fiscal libera em até 72h e a TI avisa por e-mail o horário da retirada.',
     '',

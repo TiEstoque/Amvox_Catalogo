@@ -190,27 +190,29 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'POST') {
-      // Janela de compras (horário da Bahia), todos os dias. Tolerância de
-      // alguns minutos no fim — quem abriu a reserva perto do fechamento tem
-      // o cronômetro do Pix pra concluir. Pra mudar o horário, ajuste aqui e
-      // em JANELA_COMPRAS no index.html.
+      // Janela de compras (horário da Bahia). DESLIGADA: as reservas são
+      // aceitas a qualquer hora. Pra voltar a limitar, ponha JANELA_ATIVA =
+      // true (e ajuste JANELA_COMPRAS no index.html).
+      const JANELA_ATIVA = false;
       const JANELA_INICIO_MIN = 7 * 60 + 8;   // 07:08
       const JANELA_FIM_MIN = 17 * 60 + 8;     // 17:08
-      const JANELA_TOLERANCIA_MIN = 20;
-      const [hBahia, mBahia] = new Intl.DateTimeFormat('en-US', {
-        timeZone: 'America/Bahia',
-        hour: 'numeric',
-        minute: 'numeric',
-        hourCycle: 'h23',
-      })
-        .format(new Date())
-        .split(':')
-        .map(Number);
-      const minutosBahia = hBahia * 60 + mBahia;
-      if (minutosBahia < JANELA_INICIO_MIN || minutosBahia >= JANELA_FIM_MIN + JANELA_TOLERANCIA_MIN) {
-        return res.status(403).json({
-          error: 'As compras funcionam das 07:08 às 17:08. Volte dentro desse horário para fazer a sua reserva. 😉',
-        });
+      const JANELA_TOLERANCIA_MIN = 20;       // folga no fim, pro cronômetro do Pix
+      if (JANELA_ATIVA) {
+        const [hBahia, mBahia] = new Intl.DateTimeFormat('en-US', {
+          timeZone: 'America/Bahia',
+          hour: 'numeric',
+          minute: 'numeric',
+          hourCycle: 'h23',
+        })
+          .format(new Date())
+          .split(':')
+          .map(Number);
+        const minutosBahia = hBahia * 60 + mBahia;
+        if (minutosBahia < JANELA_INICIO_MIN || minutosBahia >= JANELA_FIM_MIN + JANELA_TOLERANCIA_MIN) {
+          return res.status(403).json({
+            error: 'As compras funcionam das 07:08 às 17:08. Volte dentro desse horário para fazer a sua reserva. 😉',
+          });
+        }
       }
 
       const body = parseBody(req);

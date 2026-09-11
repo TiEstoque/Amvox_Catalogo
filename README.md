@@ -104,8 +104,12 @@ update items set ativo = true where id = 'ID_DO_ITEM';
 
 ## Janela de compras
 
-As reservas só são aceitas **todos os dias das 07:08 às 17:08** (horário da
-Bahia). A trava fica no `POST /api/reservas` (com 20 min de tolerância no
+**Desligada no momento** — o catálogo aceita reservas a qualquer hora. Pra
+religar: `JANELA_ATIVA = true` em `api/reservas/index.js` e `JANELA_COMPRAS =
+{ inicio, fim }` no `index.html`.
+
+Quando ativa, as reservas só são aceitas **todos os dias das 07:08 às 17:08**
+(horário da Bahia). A trava fica no `POST /api/reservas` (com 20 min de tolerância no
 fim, pra quem está no cronômetro do Pix); o `index.html` mostra a faixa
 verde/escura no topo e bloqueia o botão Finalizar fora do horário. Pra mudar
 o horário, ajuste `JANELA_INICIO_MIN`/`JANELA_FIM_MIN` em
