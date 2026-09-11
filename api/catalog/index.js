@@ -120,7 +120,8 @@ function shapeItem(row, state) {
     const reserved = state.reserved_qty || 0;
     const sold = state.sold_qty || 0;
     const availableQty = Math.max(0, row.estoque - reserved - sold);
-    return { ...base, isStock: true, estoque: row.estoque, availableQty, disponivel: availableQty > 0 };
+    // reservedQty/soldQty alimentam o resumo de estoque do Painel
+    return { ...base, isStock: true, estoque: row.estoque, availableQty, reservedQty: reserved, soldQty: sold, disponivel: availableQty > 0 };
   }
   const status = state.status || 'Disponível';
   return { ...base, isStock: false, itemStatus: status, disponivel: status === 'Disponível' };

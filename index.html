@@ -381,6 +381,7 @@
         <button class="subtab-btn active" data-sub="chamados" onclick="switchAdminSub('chamados')">Chamados / Reservas</button>
         <button class="subtab-btn" data-sub="liberacao" onclick="switchAdminSub('liberacao')">🚚 Liberação de hoje</button>
         <button class="subtab-btn" data-sub="catalogo" onclick="switchAdminSub('catalogo')">Gerenciar catálogo</button>
+        <button class="subtab-btn" data-sub="estoque" onclick="switchAdminSub('estoque')">📦 Estoque</button>
         <button class="subtab-btn" data-sub="vendidos" onclick="switchAdminSub('vendidos')">Itens vendidos</button>
         <button class="subtab-btn" data-sub="usuarios" onclick="switchAdminSub('usuarios')">Usuários</button>
         <button class="subtab-btn" data-sub="vendas" onclick="switchAdminSub('vendas')">Vendas</button>
@@ -435,6 +436,17 @@
       </div>
 
       <!-- Sub: Catálogo -->
+      <!-- Sub: Estoque (quanto tem de cada coisa) -->
+      <div id="admin-sub-estoque" class="hidden">
+        <div class="dp-summary" id="estoqueStats" style="grid-template-columns:repeat(4,1fr);"></div>
+        <div class="form-card">
+          <h2>Quanto tem de cada coisa <span id="estoqueResumo" style="font-size:12.5px;font-weight:600;color:var(--ink-soft);"></span></h2>
+          <p>Os itens agrupados por modelo: monitor pelo tamanho da tela, computador pelo processador e memória, o resto pelo título. “Disponíveis” é o que ainda dá pra vender hoje. Quando o mesmo modelo está com preços diferentes, a linha mostra a faixa em laranja — quase sempre é item que passou batido numa alteração.</p>
+          <div class="search-box" style="max-width:320px;margin-bottom:14px;"><input type="text" id="estoqueBusca" placeholder="Buscar modelo ou categoria..." oninput="renderEstoque()"></div>
+          <div id="estoqueLista"></div>
+        </div>
+      </div>
+
       <div id="admin-sub-catalogo" class="hidden">
         <div class="form-card" id="historicoPrecosCard">
           <h2>Histórico de preços <span id="historicoResumo" style="font-size:12.5px;font-weight:600;color:var(--ink-soft);"></span></h2>
@@ -1816,6 +1828,7 @@ function switchAdminSub(name){
   document.getElementById('admin-sub-catalogo').classList.toggle('hidden', name!=='catalogo');
   if(name==='catalogo') carregarHistoricoPrecos();
   document.getElementById('admin-sub-liberacao').classList.toggle('hidden', name!=='liberacao');
+  document.getElementById('admin-sub-estoque').classList.toggle('hidden', name!=='estoque');
   document.getElementById('admin-sub-vendidos').classList.toggle('hidden', name!=='vendidos');
   document.getElementById('admin-sub-usuarios').classList.toggle('hidden', name!=='usuarios');
   document.getElementById('admin-sub-vendas').classList.toggle('hidden', name!=='vendas');
@@ -1823,6 +1836,7 @@ function switchAdminSub(name){
   if(name==='chamados') renderDP();
   else if(name==='liberacao') renderLiberacao();
   else if(name==='catalogo') renderManageList();
+  else if(name==='estoque') renderEstoque();
   else if(name==='vendidos') renderVendidos();
   else if(name==='usuarios') renderUsuarios();
   else if(name==='promocao') renderPromocao();
@@ -2997,6 +3011,114 @@ function desenharUsuarios(){
    Lista de CPFs que podem se cadastrar (relação do RH + exceções da TI).
    Card na aba Usuários: colar CPFs, ver/desativar/remover. */
 let autorizadosCache = null;
+
+/* ============ ESTOQUE: QUANTO TEM DE CADA COISA (admin) ============
+   Resumo por modelo, calculado do próprio catálogo já carregado — monitor
+   pelo tamanho da tela, computador pelo processador + memória, o resto pelo
+   título. Não consulta nada a mais: o que aparece aqui é o mesmo que o
+   associado vê na loja. */
+
+// Memória RAM de um computador. As descrições são texto livre ("CPU 8GB
+// 240GB", "· 8 GB DDR3 RAM"), então: primeiro tenta o número colado em
+// RAM/memória; senão, entre os valores em GB, fica com o maior até 64 —
+// acima disso é disco, não memória.
+function memoriaPc(i){
+  const txt = `${i.titulo || ''} ${i.descricao || ''}`;
+  const explicito = txt.match(/(\d{1,3})\s*GB(?:\s+DDR\d)?\s*(?:de\s+)?(?:RAM|mem[oó]ria)/i);
+  if(explicito) return parseInt(explicito[1], 10);
+  const candidatos = [...txt.matchAll(/(\d{1,3})\s*GB/gi)].map(m => parseInt(m[1], 10)).filter(n => n > 0 && n <= 64);
+  return candidatos.length ? Math.max(...candidatos) : null;
+}
+
+function grupoEstoque(i){
+  if(i.categoria === 'Monitores'){
+    const t = tamanhoMonitor(i);
+    return t ? `Monitor ${t}"` : 'Monitor (tamanho não informado)';
+  }
+  if(i.categoria === 'Computadores'){
+    const cpu = processadorPc(i) || 'Outros';
+    const ram = memoriaPc(i);
+    return ram ? `${cpu} · ${ram} GB RAM` : `${cpu} · memória não informada`;
+  }
+  return String(i.titulo || '').replace(/\s*#\s*\d+\s*$/, '').trim() || i.categoria || '—';
+}
+
+function resumirEstoque(){
+  const grupos = new Map();
+  effectiveCatalog.forEach(i => {
+    const chave = `${i.categoria}||${grupoEstoque(i)}`;
+    if(!grupos.has(chave)) grupos.set(chave, { categoria: i.categoria || '—', grupo: grupoEstoque(i), disp:0, res:0, vend:0, total:0, precos: new Set() });
+    const g = grupos.get(chave);
+    g.precos.add(Number(i.preco) || 0);
+    if(i.isStock){
+      const total = Number(i.estoque) || 0;
+      const res = Number(i.reservedQty) || 0;
+      const vend = Number(i.soldQty) || 0;
+      g.total += total; g.res += res; g.vend += vend;
+      g.disp += Math.max(0, Number(i.availableQty) || 0);
+    } else {
+      g.total += 1;
+      if(i.itemStatus === 'Vendido') g.vend += 1;
+      else if(i.itemStatus === 'Reservado') g.res += 1;
+      else g.disp += 1;
+    }
+  });
+  return [...grupos.values()].sort((a,b) =>
+    a.categoria.localeCompare(b.categoria,'pt-BR') || b.disp - a.disp || a.grupo.localeCompare(b.grupo,'pt-BR'));
+}
+
+function renderEstoque(){
+  const lista = document.getElementById('estoqueLista');
+  if(!lista) return;
+  if(!effectiveCatalog.length){ lista.innerHTML = '<div class="empty">Catálogo ainda não carregado.</div>'; return; }
+  const todos = resumirEstoque();
+  const termo = (document.getElementById('estoqueBusca')?.value || '').trim().toLowerCase();
+  const grupos = todos.filter(g => !termo || g.grupo.toLowerCase().includes(termo) || g.categoria.toLowerCase().includes(termo));
+
+  const soma = (arr, campo) => arr.reduce((a,g) => a + g[campo], 0);
+  const stats = document.getElementById('estoqueStats');
+  if(stats) stats.innerHTML = `
+    <div class="dp-stat"><div class="n" style="color:var(--success);">${soma(todos,'disp')}</div><div class="l">Disponíveis</div></div>
+    <div class="dp-stat"><div class="n" style="color:var(--accent-ink, var(--ink));">${soma(todos,'res')}</div><div class="l">Reservados</div></div>
+    <div class="dp-stat"><div class="n" style="color:var(--ink-soft);">${soma(todos,'vend')}</div><div class="l">Vendidos</div></div>
+    <div class="dp-stat"><div class="n">${soma(todos,'total')}</div><div class="l">Total no catálogo</div></div>`;
+
+  const resumo = document.getElementById('estoqueResumo');
+  if(resumo) resumo.textContent = `· ${todos.length} modelo(s)${termo ? ` — ${grupos.length} na busca` : ''}`;
+
+  if(!grupos.length){ lista.innerHTML = '<div class="empty">Nenhum modelo encontrado nessa busca.</div>'; return; }
+
+  let html = '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;min-width:560px;">';
+  let catAtual = null;
+  grupos.forEach(g => {
+    if(g.categoria !== catAtual){
+      catAtual = g.categoria;
+      const daCat = grupos.filter(x => x.categoria === catAtual);
+      html += `<tr><td colspan="6" style="padding:16px 8px 6px;font-weight:800;font-size:13.5px;border-bottom:2px solid var(--line);">
+        ${esc(catAtual)} <span style="font-weight:600;color:var(--ink-soft);font-size:12.5px;">· ${soma(daCat,'disp')} disponível(is) de ${soma(daCat,'total')}</span></td></tr>
+        <tr style="font-size:11.5px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em;">
+          <th style="text-align:left;padding:6px 8px;font-weight:700;">Modelo</th>
+          <th style="text-align:right;padding:6px 8px;font-weight:700;">Preço</th>
+          <th style="text-align:right;padding:6px 8px;font-weight:700;">Disponíveis</th>
+          <th style="text-align:right;padding:6px 8px;font-weight:700;">Reservados</th>
+          <th style="text-align:right;padding:6px 8px;font-weight:700;">Vendidos</th>
+          <th style="text-align:right;padding:6px 8px;font-weight:700;">Total</th></tr>`;
+    }
+    const precos = [...g.precos].sort((a,b)=>a-b);
+    const precoTxt = precos.length > 1
+      ? `<span style="color:#B45309;font-weight:700;" title="mesmo modelo com preços diferentes">${brl(precos[0])} – ${brl(precos[precos.length-1])}</span>`
+      : brl(precos[0] || 0);
+    html += `<tr style="border-bottom:1px solid var(--line);">
+      <td style="padding:9px 8px;font-weight:600;">${esc(g.grupo)}</td>
+      <td style="padding:9px 8px;text-align:right;white-space:nowrap;">${precoTxt}</td>
+      <td style="padding:9px 8px;text-align:right;font-weight:800;color:${g.disp ? 'var(--success)' : 'var(--ink-soft)'};">${g.disp}</td>
+      <td style="padding:9px 8px;text-align:right;color:var(--ink-soft);">${g.res || '—'}</td>
+      <td style="padding:9px 8px;text-align:right;color:var(--ink-soft);">${g.vend || '—'}</td>
+      <td style="padding:9px 8px;text-align:right;font-weight:600;">${g.total}</td></tr>`;
+  });
+  html += '</table></div>';
+  lista.innerHTML = html;
+}
 
 /* ============ HISTÓRICO DE PREÇOS (admin) ============
    Log gravado por gatilho no banco (public.precos_historico): toda vez que o
