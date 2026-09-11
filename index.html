@@ -362,6 +362,7 @@
       <div class="chip-row" id="catChips"></div>
       <div class="chip-row hidden" id="sizeChips" style="width:100%;align-items:center;"></div>
       <div class="chip-row hidden" id="cpuChips" style="width:100%;align-items:center;"></div>
+      <div id="limiteCategoriaAviso" class="hidden" style="width:100%;font-size:12.8px;font-weight:600;color:var(--ink-soft);padding:2px 2px 0;"></div>
     </div>
 
     <div class="grid" id="grid"></div>
@@ -889,6 +890,9 @@ function prefillMeusChamados(){
 
 /* ============ CATALOGO / CART ============ */
 let activeCat = 'Todos', searchTerm = '', activeSize = 'Todos', activeCpu = 'Todos';
+// Cota total por pessoa (vem de /api/reservas?limites=1). Serve pra ignorar
+// sublimite de categoria maior que a cota — esse nunca barra nada.
+let LIMITE_PADRAO_CAT = 6;
 
 // Extrai o tamanho da tela (ex.: 18,5 / 21 / 21,5 / 24) da descrição de um
 // monitor, ignorando códigos de modelo (2270SWHEN, 22B30HM2 etc.).
@@ -938,7 +942,7 @@ function buildChips(){
   const chipsWrap = document.getElementById('catChips');
   chipsWrap.innerHTML = all.map(c=>`<button class="chip ${c===activeCat?'active':''}" data-cat="${esc(c)}">${esc(c)}</button>`).join('');
   chipsWrap.querySelectorAll('.chip').forEach(ch=>{
-    ch.addEventListener('click', ()=>{ activeCat = ch.dataset.cat; buildChips(); renderGrid(); });
+    ch.addEventListener('click', ()=>{ activeCat = ch.dataset.cat; buildChips(); renderGrid(); atualizarAvisoCategoria(); });
   });
   buildSizeChips();
   buildCpuChips();
@@ -978,20 +982,55 @@ function nomeCategoriaFront(cat, n){
   if(c === 'monitores') return n === 1 ? 'monitor' : 'monitores';
   return `${n === 1 ? 'item de' : 'itens de'} ${cat}`;
 }
+// Só os sublimites que realmente pesam: um máximo igual ou maior que a cota
+// total da pessoa (ex.: 10 monitores dentro de 6 itens) nunca chega a barrar
+// nada, e só polui o texto.
+function limitesQuePesam(lim){
+  return Object.entries(lim || {}).filter(([, n]) => Number(n) > 0 && Number(n) < LIMITE_PADRAO_CAT);
+}
+
 // "1 computador e 2 monitores" — ou, quando todas as categorias têm máximo 1,
 // "1 item de cada categoria".
 function descreverLimitesCat(lim){
-  const entradas = Object.entries(lim || {});
+  const entradas = limitesQuePesam(lim);
   if(!entradas.length) return '';
   if(entradas.length >= 2 && entradas.every(([, n]) => n === 1)) return '1 item de cada categoria';
   const partes = entradas.map(([cat, n]) => `${n} ${nomeCategoriaFront(cat, n)}`);
   return partes.length === 1 ? partes[0] : partes.slice(0, -1).join(', ') + ' e ' + partes[partes.length - 1];
 }
+
+// No card do topo entra só o resumo. A lista inteira ficava com sete
+// categorias e ninguém lia — o número que importa aparece na hora em que a
+// pessoa filtra a categoria (aviso abaixo dos chips) e quando o carrinho
+// barra o item.
 function atualizarTextoLimites(){
   const el = document.getElementById('limitesCatTexto');
+  if(el){
+    const entradas = limitesQuePesam(limitesCategoria);
+    if(!entradas.length) el.innerHTML = '';
+    else if(entradas.length <= 2) el.innerHTML = `; no máximo <b>${esc(descreverLimitesCat(limitesCategoria))}</b>`;
+    else el.innerHTML = '; <b>algumas categorias têm limite próprio</b> — o catálogo avisa na hora';
+  }
+  atualizarAvisoCategoria();
+}
+
+// "Nesta categoria: até 2 por pessoa" — só quando a pessoa está olhando uma
+// categoria que tem limite próprio.
+function atualizarAvisoCategoria(){
+  const el = document.getElementById('limiteCategoriaAviso');
   if(!el) return;
-  const txt = descreverLimitesCat(limitesCategoria);
-  el.innerHTML = txt ? `; no máximo <b>${esc(txt)}</b>` : '';
+  const lim = Number((limitesCategoria || {})[activeCat]);
+  if(activeCat === 'Todos' || !Number.isFinite(lim) || lim <= 0 || lim >= LIMITE_PADRAO_CAT){
+    el.classList.add('hidden');
+    el.innerHTML = '';
+    return;
+  }
+  const usados = Number((usadosCategoria || {})[activeCat]) || 0;
+  const restam = Math.max(0, lim - usados);
+  el.classList.remove('hidden');
+  el.innerHTML = usados
+    ? `⚠️ Nesta categoria: até <b>${lim}</b> por pessoa — você já tem ${usados}, ${restam ? `pode levar mais <b>${restam}</b>` : '<b>no limite</b>'}.`
+    : `⚠️ Nesta categoria: até <b>${lim}</b> por pessoa.`;
 }
 
 async function atualizarLimiteReserva(){
@@ -1000,6 +1039,7 @@ async function atualizarLimiteReserva(){
     if(resL.ok){
       const l = await resL.json();
       limitesCategoria = l.porCategoria || {};
+      LIMITE_PADRAO_CAT = Number(l.limitePadrao) || LIMITE_PADRAO_CAT;
       PRECOS_VALIDOS_ATE = l.precosValidosAte || null;
       atualizarAvisoPrecos();
     }
