@@ -59,6 +59,23 @@
   .aviso-precos{background:#FFF4D6;color:#6B5A20;border-bottom:1px solid #EBD9A3;text-align:center;padding:8px 16px;font-size:13.2px;font-weight:600;line-height:1.45;}
   .aviso-precos b{font-weight:800;}
   .aviso-precos.vencido{background:#FDECEC;color:#8F1D1D;border-bottom-color:#F0C9C9;}
+  /* Pulso lento (1,6s) no lugar de pisca-pisca: chama atenção sem virar
+     estroboscópio — acima de 3 flashes por segundo vira risco pra quem tem
+     epilepsia fotossensível, e cansa a vista de quem só quer comprar. */
+  @keyframes piscaPrecos{
+    0%,100%{background:#FFF4D6;color:#6B5A20;border-bottom-color:#EBD9A3;}
+    50%{background:#FFC22E;color:#3D3208;border-bottom-color:#D19E12;}
+  }
+  @keyframes piscaPrecosVencido{
+    0%,100%{background:#FDECEC;color:#8F1D1D;border-bottom-color:#F0C9C9;}
+    50%{background:#F09A9A;color:#5E0F0F;border-bottom-color:#D06C6C;}
+  }
+  .aviso-precos.pisca{animation:piscaPrecos 1.6s ease-in-out infinite;}
+  .aviso-precos.vencido.pisca{animation:piscaPrecosVencido 1.6s ease-in-out infinite;}
+  @media (prefers-reduced-motion: reduce){
+    .aviso-precos.pisca{animation:none;background:#FFC22E;color:#3D3208;}
+    .aviso-precos.vencido.pisca{animation:none;background:#F09A9A;color:#5E0F0F;}
+  }
   .cat-header{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:16px;}
   .cat-header h1{font-size:26px;margin:0 0 4px;}
   .cat-header p{margin:0;color:var(--ink-soft);font-size:13.5px;}
@@ -1151,21 +1168,27 @@ function horaVigencia(iso){
   return new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Bahia',hour:'2-digit',minute:'2-digit',hourCycle:'h23'})
     .format(new Date(iso)).replace(':','h');
 }
+function dataVigencia(iso){
+  return new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Bahia',day:'2-digit',month:'2-digit',year:'numeric'})
+    .format(new Date(iso));
+}
 function atualizarAvisoPrecos(){
   const el = document.getElementById('avisoPrecos');
   if(!el) return;
   const txt = fmtVigencia(PRECOS_VALIDOS_ATE);
   if(!txt){ el.hidden = true; return; }
   el.hidden = false;
+  const dia = dataVigencia(PRECOS_VALIDOS_ATE);
+  const hora = horaVigencia(PRECOS_VALIDOS_ATE);
   if(vigenciaVencida()){
-    el.className = 'aviso-precos vencido';
-    el.innerHTML = '\uD83D\uDCB2 A tabela de preços está <b>em revisão</b> — os valores podem mudar a qualquer momento. Ofertas válidas enquanto durar o estoque.';
+    el.className = 'aviso-precos vencido pisca';
+    el.innerHTML = `\uD83D\uDCB2 <b>TABELA DE PREÇOS EM REVISÃO</b> — a vigência terminou às ${esc(hora)} de <b>${esc(dia)}</b> e os valores podem mudar a qualquer momento. Ofertas válidas enquanto durar o estoque.`;
   } else {
-    el.className = 'aviso-precos';
+    el.className = 'aviso-precos pisca';
     const quando = ehHojeBahia(PRECOS_VALIDOS_ATE)
-      ? `hoje até as ${horaVigencia(PRECOS_VALIDOS_ATE)}`
-      : `até ${esc(txt)}`;
-    el.innerHTML = `\uD83D\uDCB2 Preços válidos <b>${quando}</b>. Depois desse horário a tabela pode ser revisada sem aviso prévio. Ofertas válidas enquanto durar o estoque.`;
+      ? `HOJE, ${esc(dia)}, até as ${esc(hora)}`
+      : `até ${esc(dia)}, às ${esc(hora)}`;
+    el.innerHTML = `\uD83D\uDCB2 PREÇOS VÁLIDOS <b>${quando}</b>. Depois desse horário a tabela pode ser revisada sem aviso prévio. Ofertas válidas enquanto durar o estoque.`;
   }
 }
 setInterval(atualizarAvisoPrecos, 60*1000);
