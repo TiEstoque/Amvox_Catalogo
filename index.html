@@ -413,6 +413,10 @@
         <div style="margin:0 0 10px;">
           <button class="btn btn-outline btn-sm" onclick="avisarFilaConferencia(this)">📣 Avisar fila de conferência (e-mail em lote)</button>
         </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:0 0 12px;">
+          <div class="search-box" style="max-width:360px;flex:1;"><input type="text" id="dpSearch" placeholder="Buscar por nome, protocolo, CPF, item ou nº da ND..."></div>
+          <span id="dpBuscaInfo" style="font-size:12.5px;font-weight:600;color:var(--ink-soft);"></span>
+        </div>
         <div class="chip-row" id="dpFilterChips" style="margin-bottom:16px;"></div>
         <div id="dpList"></div>
         <div class="empty hidden" id="dpEmpty"><div class="big">📭</div>Nenhum chamado nessa categoria.</div>
@@ -884,6 +888,8 @@ async function loadCatalog(){
 
 /* ============ UTIL ============ */
 function brl(v){ return Number(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); }
+// Busca sem tropeçar em acento: "fabio" acha "Fábio", "camera" acha "Câmera".
+function semAcento(v){ return String(v || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
 function esc(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 let toastTimer;
 function showToast(msg){
@@ -989,7 +995,7 @@ function buildSizeChips(){
     ch.addEventListener('click', ()=>{ activeSize = ch.dataset.size; buildSizeChips(); renderGrid(); });
   });
 }
-document.getElementById('searchInput').addEventListener('input', e=>{ searchTerm = e.target.value.trim().toLowerCase(); renderGrid(); });
+document.getElementById('searchInput').addEventListener('input', e=>{ searchTerm = semAcento(e.target.value); renderGrid(); });
 
 function cartQty(itemId){ const l = cart.find(c=>c.itemId===itemId); return l ? l.quantidade : 0; }
 // Quantos itens a pessoa pode colocar no carrinho: começa no padrão do
@@ -1146,7 +1152,7 @@ function renderGrid(){
     if(!i.isStock && (i.itemStatus==='Vendido' || i.itemStatus==='Reservado')) return false; // vendidos e reservados (já pagos) somem do catálogo — só o admin vê na gestão
     if(i.isStock && i.availableQty <= 0) return false; // itens de estoque esgotados também somem do catálogo público (não mostrar "Esgotado")
     const matchCat = activeCat==='Todos' || i.categoria===activeCat;
-    const hay = (String(i.numero)+' '+i.titulo+' '+i.descricao).toLowerCase();
+    const hay = semAcento(String(i.numero)+' '+i.titulo+' '+i.descricao);
     const matchSearch = !searchTerm || hay.includes(searchTerm);
     const matchSize = activeSize==='Todos' || tamanhoMonitor(i)===activeSize;
     const matchCpu = activeCat!=='Computadores' || activeCpu==='Todos' || processadorPc(i)===activeCpu;
@@ -1963,12 +1969,12 @@ function switchAdminSub(name){
 let libLista = [], libBusca = '';
 const inputLibSearch = document.getElementById('libSearch');
 if(inputLibSearch){
-  inputLibSearch.addEventListener('input', e=>{ libBusca = e.target.value.trim().toLowerCase(); desenharLiberacao(); });
+  inputLibSearch.addEventListener('input', e=>{ libBusca = semAcento(e.target.value); desenharLiberacao(); });
 }
 function casaBuscaLib(c){
   if(!libBusca) return true;
   const hay = [c.protocolo, c.nome, c.matricula, String(c.matricula||'').replace(/\D/g,''), c.setor, c.notaDebito,
-    ...c.itens.map(it=>`${it.numero} ${it.titulo} ${it.categoria||''}`)].map(v=>String(v||'').toLowerCase()).join(' ');
+    ...c.itens.map(it=>`${it.numero} ${it.titulo} ${it.categoria||''}`)].map(v=>semAcento(v)).join(' ');
   return hay.includes(libBusca);
 }
 
@@ -2110,7 +2116,7 @@ let vendidosFiltro = 'Todos';
 let retiradaBusca = '';
 const inputRetiradaSearch = document.getElementById('retiradaSearch');
 if(inputRetiradaSearch){
-  inputRetiradaSearch.addEventListener('input', e=>{ retiradaBusca = e.target.value.trim().toLowerCase(); desenharRetirada(); });
+  inputRetiradaSearch.addEventListener('input', e=>{ retiradaBusca = semAcento(e.target.value); desenharRetirada(); });
 }
 async function renderRetirada(){
   try{
@@ -2131,7 +2137,7 @@ function desenharRetirada(){
     if(!termo) return true;
     const hay = [c.nome, c.protocolo, c.matricula, c.setor]
       .concat((c.itens||[]).flatMap(i=>[i.numero, i.titulo]))
-      .map(x=>String(x||'').toLowerCase()).join(' ');
+      .map(x=>semAcento(x)).join(' ');
     return hay.includes(termo);
   };
   const lista = libLista.filter(c=>c.status==='Concluído' && !c.entregueEm).filter(casa)
@@ -2225,7 +2231,7 @@ async function renderVendidos(){
     if(vendidosFiltro==='A liberar' && l.liberado) return false;
     if(vendidosFiltro==='A entregar' && (!l.liberado || l.entregueEm)) return false;
     if(vendidosFiltro==='Entregues' && !l.entregueEm) return false;
-    const hay = (l.numero+' '+l.titulo+' '+l.descricao+' '+l.nome+' '+l.protocolo+' '+(l.setor||'')+' '+(l.statusChamado||'')).toLowerCase();
+    const hay = semAcento(l.numero+' '+l.titulo+' '+l.descricao+' '+l.nome+' '+l.protocolo+' '+(l.setor||'')+' '+(l.statusChamado||''));
     return !vendidosSearch || hay.includes(vendidosSearch);
   });
   document.getElementById('vendidosCount').textContent =
@@ -2265,7 +2271,7 @@ async function renderVendidos(){
   }).join('') || '<p style="color:var(--ink-soft);">Nenhum item vendido encontrado.</p>';
 }
 document.getElementById('vendidosSearch').addEventListener('input', e=>{
-  vendidosSearch = e.target.value.trim().toLowerCase();
+  vendidosSearch = semAcento(e.target.value);
   renderVendidos();
 });
 
@@ -2399,7 +2405,7 @@ async function renderVendas(){
 let vendasList = [], vendasBusca = '';
 const inputVendasSearch = document.getElementById('vendasSearch');
 if(inputVendasSearch){
-  inputVendasSearch.addEventListener('input', e=>{ vendasBusca = e.target.value.trim().toLowerCase(); desenharVendasLista(); });
+  inputVendasSearch.addEventListener('input', e=>{ vendasBusca = semAcento(e.target.value); desenharVendasLista(); });
 }
 
 function desenharVendasLista(){
@@ -2408,7 +2414,7 @@ function desenharVendasLista(){
     const hay = [c.protocolo, c.nome, c.matricula, String(c.matricula||'').replace(/\D/g,''), c.setor,
       c.notaDebito, brl(c.valorTotal), String(c.valorTotal),
       ...c.itens.map(it=>`${it.numero} ${it.titulo} ${it.categoria||''}`)]
-      .map(v=>String(v||'').toLowerCase()).join(' ');
+      .map(v=>semAcento(v)).join(' ');
     return hay.includes(vendasBusca);
   });
   const total = vendasList.length;
@@ -2450,6 +2456,7 @@ async function refreshAdmin(){
 }
 
 let dpFilter = 'Em liberação do Fiscal';
+let dpBusca = '';
 let adminChamadosList = [];
 async function renderDP(){
   let list;
@@ -2463,7 +2470,12 @@ async function renderDP(){
     showToast('Não foi possível carregar os chamados agora.');
     return;
   }
+  desenharDp(list);
+}
 
+// Redesenha com a lista já carregada — a busca chama isto a cada tecla, sem
+// bater no servidor de novo.
+function desenharDp(list){
   const active = c => !['Reprovado pelo DP','Cancelado','Concluído'].includes(c.status);
   const counts = {
     'Todos': list.length,
@@ -2488,10 +2500,30 @@ async function renderDP(){
   document.querySelectorAll('#dpFilterChips .chip').forEach(ch=>{ ch.addEventListener('click', ()=>{ dpFilter = ch.dataset.f; renderDP(); }); });
 
   let rows;
-  if(dpFilter==='Todos') rows = list;
+  if(dpBusca){
+    // Buscando, ignora o filtro de status: quem procura um nome quer achar,
+    // esteja o chamado em liberação, concluído ou cancelado.
+    rows = list.filter(c=>{
+      const hay = [c.protocolo, c.nome, c.matricula, String(c.matricula||'').replace(/\D/g,''), c.setor,
+        c.notaDebito, brl(c.valorTotal), String(c.valorTotal), c.status,
+        ...(c.itens||[]).map(it=>`${it.numero} ${it.titulo} ${it.categoria||''}`)]
+        .map(v=>semAcento(v)).join(' ');
+      return hay.includes(dpBusca);
+    });
+  }
+  else if(dpFilter==='Todos') rows = list;
   else if(dpFilter==='Reservado (ativo)') rows = list.filter(active);
   else if(dpFilter==='Cancelado / Reprovado') rows = list.filter(c=>['Cancelado','Reprovado pelo DP'].includes(c.status));
   else rows = list.filter(c=>c.status===dpFilter);
+
+  const info = document.getElementById('dpBuscaInfo');
+  if(info) info.textContent = dpBusca
+    ? `${rows.length} ${rows.length===1?'chamado encontrado':'chamados encontrados'} — buscando em todos os status`
+    : '';
+  const vazio = document.getElementById('dpEmpty');
+  if(vazio) vazio.innerHTML = dpBusca
+    ? '<div class="big">\uD83D\uDD0E</div>Nenhum chamado com esse termo.'
+    : '<div class="big">\uD83D\uDCED</div>Nenhum chamado nessa categoria.';
   document.getElementById('dpEmpty').classList.toggle('hidden', rows.length>0);
   document.getElementById('dpList').innerHTML = rows.map(c=>{
     const itemsHtml = c.itens.map(it=>{
@@ -2561,6 +2593,15 @@ function seloNd(c){
   return `<button class="badge badge-ok" style="margin-left:8px;border:none;cursor:pointer;font-family:inherit;"
     title="Baixar a Nota de Débito ${c.notaDebito}"
     onclick="baixarNotaDebito('${c.protocolo}', this)">\uD83E\uDDFE ND ${c.notaDebito}</button>`;
+}
+
+const inputDpSearch = document.getElementById('dpSearch');
+if(inputDpSearch){
+  inputDpSearch.addEventListener('input', e=>{
+    dpBusca = semAcento(e.target.value);
+    if(adminChamadosList.length) desenharDp(adminChamadosList);
+    else renderDP();
+  });
 }
 
 async function baixarNotaDebito(protocolo, btnEl){
@@ -2895,7 +2936,7 @@ async function addItem(){
 }
 
 let manageSearchTerm = '';
-document.getElementById('manageSearch').addEventListener('input', e=>{ manageSearchTerm = e.target.value.trim().toLowerCase(); renderManageList(); });
+document.getElementById('manageSearch').addEventListener('input', e=>{ manageSearchTerm = semAcento(e.target.value); renderManageList(); });
 
 // Situação do item na gestão: Disponível / Reservado / Concluído / Esgotado
 let manageFilter = 'Todos';
@@ -2906,7 +2947,7 @@ function estadoItem(i){
 
 function renderManageList(){
   let base = effectiveCatalog.filter(i=>{
-    const hay = (String(i.numero)+' '+i.titulo+' '+i.descricao).toLowerCase();
+    const hay = semAcento(String(i.numero)+' '+i.titulo+' '+i.descricao);
     return !manageSearchTerm || hay.includes(manageSearchTerm);
   });
 
@@ -3116,7 +3157,7 @@ async function removeItem(id){
 /* ============ USUÁRIOS (admin) ============ */
 let usuariosList = [];
 let userSearchTerm = '';
-document.getElementById('userSearch').addEventListener('input', e=>{ userSearchTerm = e.target.value.trim().toLowerCase(); desenharUsuarios(); });
+document.getElementById('userSearch').addEventListener('input', e=>{ userSearchTerm = semAcento(e.target.value); desenharUsuarios(); });
 
 let chamadosPorCpf = {};
 
@@ -3165,7 +3206,7 @@ function desenharUsuarios(){
   if(!wrap) return;
   const lista = usuariosList.filter(u=>{
     if(!userSearchTerm) return true;
-    const hay = [u.nome, u.email, u.cpf, u.setor].map(v=>String(v||'').toLowerCase()).join(' ');
+    const hay = [u.nome, u.email, u.cpf, u.setor].map(v=>semAcento(v)).join(' ');
     return hay.includes(userSearchTerm);
   });
   document.getElementById('userEmpty').classList.toggle('hidden', lista.length>0);
@@ -3259,8 +3300,8 @@ function renderEstoque(){
   if(!lista) return;
   if(!effectiveCatalog.length){ lista.innerHTML = '<div class="empty">Catálogo ainda não carregado.</div>'; return; }
   const todos = resumirEstoque();
-  const termo = (document.getElementById('estoqueBusca')?.value || '').trim().toLowerCase();
-  const grupos = todos.filter(g => !termo || g.grupo.toLowerCase().includes(termo) || g.categoria.toLowerCase().includes(termo));
+  const termo = semAcento(document.getElementById('estoqueBusca')?.value);
+  const grupos = todos.filter(g => !termo || semAcento(g.grupo).includes(termo) || semAcento(g.categoria).includes(termo));
 
   const soma = (arr, campo) => arr.reduce((a,g) => a + g[campo], 0);
   const stats = document.getElementById('estoqueStats');
@@ -3332,11 +3373,11 @@ function renderHistoricoPrecos(){
   const lista = document.getElementById('historicoLista');
   const resumo = document.getElementById('historicoResumo');
   if(!lista || !historicoPrecosCache) return;
-  const termo = (document.getElementById('historicoBusca')?.value || '').trim().toLowerCase();
+  const termo = semAcento(document.getElementById('historicoBusca')?.value);
   const linhas = historicoPrecosCache.filter(h => !termo
-    || String(h.numero||'').toLowerCase().includes(termo)
-    || String(h.titulo||'').toLowerCase().includes(termo)
-    || String(h.categoria||'').toLowerCase().includes(termo));
+    || semAcento(h.numero).includes(termo)
+    || semAcento(h.titulo).includes(termo)
+    || semAcento(h.categoria).includes(termo));
   if(resumo) resumo.textContent = historicoPrecosCache.length
     ? `· ${historicoPrecosCache.length} alteração(ões) registrada(s)${termo ? ` — ${linhas.length} na busca` : ''}`
     : '· nenhuma alteração registrada ainda';
@@ -3595,7 +3636,7 @@ async function adicionarAutorizados(){
 function abrirListaAutorizados(){
   const d = autorizadosCache;
   if(!d){ showToast('Lista ainda não carregada. Tente de novo em instantes.'); return; }
-  const linhas = (filtro) => d.lista.filter(r => !filtro || [r.nome, r.cpf, r.chapa, r.origem, r.observacao].map(v=>String(v||'').toLowerCase()).join(' ').includes(filtro)).map(r => `
+  const linhas = (filtro) => d.lista.filter(r => !filtro || [r.nome, r.cpf, r.chapa, r.origem, r.observacao].map(v=>semAcento(v)).join(' ').includes(filtro)).map(r => `
     <tr style="${r.ativo ? '' : 'opacity:.55;'}">
       <td class="mono" style="font-size:11.5px;white-space:nowrap;">${esc(formatCpf(r.cpf))}</td>
       <td>${esc(r.nome || '—')}${r.chapa ? ` <span style="color:var(--ink-soft);font-size:11px;">(chapa ${esc(r.chapa)})</span>` : ''}${r.observacao ? `<div style="color:var(--ink-soft);font-size:11px;">${esc(r.observacao)}</div>` : ''}</td>
@@ -3615,7 +3656,7 @@ function abrirListaAutorizados(){
     </div>
     <div class="modal-foot"><button class="btn btn-primary" onclick="closeModal()">Fechar</button></div>`;
   document.getElementById('autorizadosBusca').addEventListener('input', e => {
-    document.querySelector('#autorizadosTabela tbody').innerHTML = linhas(e.target.value.trim().toLowerCase());
+    document.querySelector('#autorizadosTabela tbody').innerHTML = linhas(semAcento(e.target.value));
   });
   overlay.classList.remove('hidden');
 }
