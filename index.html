@@ -2035,7 +2035,7 @@ function desenharLiberacao(){
         <div>
           <span class="badge badge-dp">${i+1}º da fila</span>
           <span class="mono" style="font-size:11.5px;color:var(--ink-soft);margin-left:8px;">${c.protocolo}</span>
-          ${c.notaDebito ? `<span class="badge badge-ok" style="margin-left:8px;">ND ${c.notaDebito}</span>` : ''}
+          ${seloNd(c)}
           <div style="font-weight:700;margin-top:2px;">${esc(c.nome)}</div>
         </div>
         <div class="val">${brl(c.valorTotal)}</div>
@@ -2428,7 +2428,7 @@ function desenharVendasLista(){
       <div class="ticket-top">
         <div>
           <span class="mono" style="font-size:11.5px;color:var(--ink-soft);">${c.protocolo}</span>
-          ${c.notaDebito ? `<span class="badge badge-ok" style="margin-left:8px;">ND ${c.notaDebito}</span>` : ''}
+          ${seloNd(c)}
           <div style="font-weight:700;margin-top:2px;">${esc(c.nome)}</div>
         </div>
         <div class="val">${brl(c.valorTotal)}</div>
@@ -2529,7 +2529,7 @@ async function renderDP(){
     return `
     <div class="dp-row">
       <div class="dp-row-top">
-        <div><span class="mono" style="font-size:11.5px;color:var(--ink-soft);">${c.protocolo}</span> <strong style="margin-left:8px;">${esc(c.nome)}</strong></div>
+        <div><span class="mono" style="font-size:11.5px;color:var(--ink-soft);">${c.protocolo}</span> <strong style="margin-left:8px;">${esc(c.nome)}</strong>${seloNd(c)}</div>
         ${statusBadge(c.status)}
       </div>
       <div class="dp-items">${itemsHtml}</div>
@@ -2551,6 +2551,16 @@ async function renderDP(){
     </div>`;
   }).join('');
   renderManageList(); // atualiza a gestão com os dados de venda recém-carregados
+}
+
+// Selo "🧾 ND 202600051" clicável no topo do card: baixa a nota direto.
+// A TI procura a nota pelo número dela, não por um botão no meio da fileira
+// de ações — que ainda existe, este selo é o atalho.
+function seloNd(c){
+  if(!c.notaDebito) return '';
+  return `<button class="badge badge-ok" style="margin-left:8px;border:none;cursor:pointer;font-family:inherit;"
+    title="Baixar a Nota de Débito ${c.notaDebito}"
+    onclick="baixarNotaDebito('${c.protocolo}', this)">\uD83E\uDDFE ND ${c.notaDebito}</button>`;
 }
 
 async function baixarNotaDebito(protocolo, btnEl){
