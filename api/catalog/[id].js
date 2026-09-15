@@ -21,6 +21,30 @@ export default async function handler(req, res) {
       }
       const updatePayload = { categoria, numero: String(numero), titulo, descricao: descricao || '—', condicao: condicao || null, preco };
       if (fotoUrl !== undefined) updatePayload.foto_url = fotoUrl || null;
+
+      // Estoque (quantidade) — só para itens que JÁ têm quantidade (estoque != null).
+      // Trava: a quantidade nova não pode ser menor que vendidos + reservados,
+      // senão a disponibilidade do catálogo fica inconsistente.
+      if (body.estoque !== undefined && body.estoque !== null && String(body.estoque).trim() !== '') {
+        const novo = parseInt(body.estoque, 10);
+        if (!Number.isInteger(novo) || novo < 0) {
+          return res.status(400).json({ error: 'Quantidade de estoque inválida (use um número inteiro maior ou igual a 0).' });
+        }
+        const { data: itemAtual, error: itErr } = await supabase.from('items').select('estoque').eq('id', id).maybeSingle();
+        if (itErr) throw itErr;
+        if (!itemAtual) return res.status(404).json({ error: 'Item não encontrado.' });
+        if (itemAtual.estoque === null || itemAtual.estoque === undefined) {
+          return res.status(400).json({ error: 'Esse item é único (sem quantidade). Só itens de estoque têm quantidade editável.' });
+        }
+        const { data: st, error: stErr } = await supabase.from('item_state').select('reserved_qty, sold_qty').eq('item_id', id).maybeSingle();
+        if (stErr) throw stErr;
+        const minimo = (st?.reserved_qty || 0) + (st?.sold_qty || 0);
+        if (novo < minimo) {
+          return res.status(400).json({ error: `A quantidade não pode ser menor que ${minimo} (já vendidos + reservados).` });
+        }
+        updatePayload.estoque = novo;
+      }
+
       const { error } = await supabase
         .from('items')
         .update(updatePayload)
