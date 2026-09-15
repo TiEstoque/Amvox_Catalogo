@@ -398,6 +398,7 @@
       <div class="subtabs">
         <button class="subtab-btn active" data-sub="chamados" onclick="switchAdminSub('chamados')">Chamados / Reservas</button>
         <button class="subtab-btn" data-sub="liberacao" onclick="switchAdminSub('liberacao')">🚚 Liberação de hoje</button>
+        <button class="subtab-btn" data-sub="retirada" onclick="switchAdminSub('retirada')">📦 Aguardando retirada</button>
         <button class="subtab-btn" data-sub="catalogo" onclick="switchAdminSub('catalogo')">Gerenciar catálogo</button>
         <button class="subtab-btn" data-sub="estoque" onclick="switchAdminSub('estoque')">📦 Estoque</button>
         <button class="subtab-btn" data-sub="vendidos" onclick="switchAdminSub('vendidos')">Itens vendidos</button>
@@ -438,6 +439,22 @@
 
         <h2 style="font-size:16px;margin:22px 0 4px;">3 · Retirados hoje <span id="libEntreguesCount" style="font-size:12.8px;font-weight:600;color:var(--ink-soft);"></span></h2>
         <div id="libEntregues"></div>
+      </div>
+
+      <!-- Sub: Aguardando retirada (lista completa das compras liberadas esperando o cliente) -->
+      <div id="admin-sub-retirada" class="hidden">
+        <div class="panel-head">
+          <div>
+            <h2 style="font-size:17px;margin:0;">📦 Aguardando retirada</h2>
+            <p id="retiradaCount" style="color:var(--ink-soft);font-size:12.8px;margin:4px 0 0;"></p>
+          </div>
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+            <button class="btn btn-outline btn-sm" onclick="renderRetirada()">↻ Atualizar</button>
+            <div class="search-box" style="max-width:300px;"><input type="text" id="retiradaSearch" placeholder="Buscar por nome, nº, protocolo, setor ou CPF..."></div>
+          </div>
+        </div>
+        <p style="color:var(--ink-soft);font-size:12.8px;margin:6px 0 14px;">Compras já liberadas (o comprador foi avisado por e-mail) esperando ele buscar. Quando retirar, clique em <b>Registrar retirada</b>. É a lista completa — a aba "Liberação de hoje" mostra o recorte do dia.</p>
+        <div id="retiradaList"></div>
       </div>
 
       <!-- Sub: Itens vendidos (conferência) -->
@@ -1923,6 +1940,7 @@ function switchAdminSub(name){
   document.getElementById('admin-sub-catalogo').classList.toggle('hidden', name!=='catalogo');
   if(name==='catalogo') carregarHistoricoPrecos();
   document.getElementById('admin-sub-liberacao').classList.toggle('hidden', name!=='liberacao');
+  document.getElementById('admin-sub-retirada').classList.toggle('hidden', name!=='retirada');
   document.getElementById('admin-sub-estoque').classList.toggle('hidden', name!=='estoque');
   document.getElementById('admin-sub-vendidos').classList.toggle('hidden', name!=='vendidos');
   document.getElementById('admin-sub-usuarios').classList.toggle('hidden', name!=='usuarios');
@@ -1930,6 +1948,7 @@ function switchAdminSub(name){
   document.getElementById('admin-sub-promocao').classList.toggle('hidden', name!=='promocao');
   if(name==='chamados') renderDP();
   else if(name==='liberacao') renderLiberacao();
+  else if(name==='retirada') renderRetirada();
   else if(name==='catalogo') renderManageList();
   else if(name==='estoque') renderEstoque();
   else if(name==='vendidos') renderVendidos();
@@ -2084,6 +2103,64 @@ function copiarListaSeparacao(){
 let vendidosSearch = '';
 let vendidosFiltro = 'Todos';
 
+/* ============ ABA: AGUARDANDO RETIRADA ============
+   Lista completa das compras liberadas esperando o cliente buscar
+   (Concluído e ainda não entregue), com o botão Registrar retirada.
+   A seção dentro de "Liberação de hoje" continua existindo. */
+let retiradaBusca = '';
+const inputRetiradaSearch = document.getElementById('retiradaSearch');
+if(inputRetiradaSearch){
+  inputRetiradaSearch.addEventListener('input', e=>{ retiradaBusca = e.target.value.trim().toLowerCase(); desenharRetirada(); });
+}
+async function renderRetirada(){
+  try{
+    const res = await fetch('/api/reservas', { headers: adminHeaders() });
+    if(!res.ok) throw new Error('Falha ao carregar os chamados.');
+    libLista = (await res.json()).chamados || [];
+    adminChamadosList = libLista;
+  }catch(err){
+    const box = document.getElementById('retiradaList');
+    if(box) box.innerHTML = `<div class="empty"><div class="big">⚠️</div>${esc(err.message||'Não foi possível carregar.')}</div>`;
+    return;
+  }
+  desenharRetirada();
+}
+function desenharRetirada(){
+  const termo = retiradaBusca;
+  const casa = c => {
+    if(!termo) return true;
+    const hay = [c.nome, c.protocolo, c.matricula, c.setor]
+      .concat((c.itens||[]).flatMap(i=>[i.numero, i.titulo]))
+      .map(x=>String(x||'').toLowerCase()).join(' ');
+    return hay.includes(termo);
+  };
+  const lista = libLista.filter(c=>c.status==='Concluído' && !c.entregueEm).filter(casa)
+    .sort((a,b)=>new Date(a.concluidoEm||a.dataAbertura)-new Date(b.concluidoEm||b.dataAbertura));
+  const elCount = document.getElementById('retiradaCount');
+  if(elCount) elCount.textContent = lista.length ? `${lista.length} compra${lista.length===1?'':'s'} esperando o cliente buscar` : '';
+  const box = document.getElementById('retiradaList');
+  if(!box) return;
+  box.innerHTML = lista.length ? lista.map(c=>`
+    <div class="ticket">
+      <div class="ticket-top">
+        <div>
+          <span class="mono" style="font-size:11.5px;color:var(--ink-soft);">${c.protocolo}</span>
+          ${ehHoje(c.concluidoEm) ? '<span class="badge badge-ok" style="margin-left:8px;">liberado hoje</span>' : ''}
+          <div style="font-weight:700;margin-top:2px;">${esc(c.nome)}</div>
+        </div>
+        <div class="val">${brl(c.valorTotal)}</div>
+      </div>
+      <div class="items-list">${itensLinha(c)}</div>
+      <div class="meta" style="margin-top:4px;">${esc(c.setor||'—')}${c.retiradaInfo ? ` · retirada combinada: <b>${esc(c.retiradaInfo)}</b>` : ''}${c.concluidoEm ? ` · liberado em ${new Date(c.concluidoEm).toLocaleString('pt-BR')}` : ''}</div>
+      <div class="dp-actions" style="margin-top:8px;">
+        <button class="btn btn-primary btn-sm" onclick="marcarEntrega('${c.protocolo}')">📦 Registrar retirada</button>
+        <button class="btn btn-outline btn-sm" onclick="baixarNotaDebito('${c.protocolo}', this)">Baixar ND</button>
+      </div>
+    </div>`).join('') : (termo
+      ? '<div class="empty"><div class="big">🔎</div>Nenhuma compra com esse termo.</div>'
+      : '<div class="empty"><div class="big">📦</div>Ninguém aguardando retirada no momento.</div>');
+}
+
 async function marcarEntrega(protocolo){
   const obs = prompt('Entrega do chamado ' + protocolo + '\n\nQuem retirou / observação (opcional):', '');
   if(obs === null) return;
@@ -2100,6 +2177,7 @@ async function marcarEntrega(protocolo){
     showToast('Entrega registrada ✓');
     renderVendidos();
     if(document.getElementById('admin-sub-liberacao') && !document.getElementById('admin-sub-liberacao').classList.contains('hidden')) renderLiberacao();
+    if(document.getElementById('admin-sub-retirada') && !document.getElementById('admin-sub-retirada').classList.contains('hidden')) renderRetirada();
   }catch(err){
     showToast(err.message || 'Não foi possível registrar a entrega.');
   }
@@ -2709,6 +2787,7 @@ async function dpDecide(protocolo, decisao){
     renderDP();
     const visivel = (id) => document.getElementById(id) && !document.getElementById(id).classList.contains('hidden');
     if(visivel('admin-sub-liberacao')) renderLiberacao();
+    if(visivel('admin-sub-retirada')) renderRetirada();
     if(visivel('admin-sub-vendidos')) renderVendidos();
   } catch(err){
     console.error('Erro ao processar decisão do DP', err);
