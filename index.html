@@ -91,6 +91,32 @@
   .chip:hover{border-color:var(--primary-mid);color:var(--primary);}
   .chip.active{background:var(--primary);border-color:var(--primary);color:#fff;}
 
+  /* Estoque em fotos: um card por modelo, com a barra mostrando quanto já saiu */
+  .est-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(215px,1fr));gap:14px;margin-bottom:22px;}
+  .est-card{background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden;display:flex;flex-direction:column;
+    transition:box-shadow .15s, transform .15s;}
+  .est-card:hover{box-shadow:0 6px 18px rgba(16,24,40,.09);transform:translateY(-2px);}
+  .est-card.esgotado{opacity:.62;}
+  .est-foto{position:relative;aspect-ratio:4/3;background:#F1F5F9;display:flex;align-items:center;justify-content:center;}
+  .est-foto img{width:100%;height:100%;object-fit:cover;display:block;}
+  .est-foto .sem{font-size:11.5px;color:var(--ink-soft);}
+  .est-qtd{position:absolute;top:8px;right:8px;background:#1E7A4C;color:#fff;font-weight:800;font-size:12.5px;
+    padding:5px 10px;border-radius:999px;box-shadow:0 1px 4px rgba(0,0,0,.25);}
+  .est-qtd.zero{background:#8F1D1D;}
+  .est-corpo{padding:11px 12px 12px;display:flex;flex-direction:column;gap:5px;flex:1;}
+  .est-modelo{font-weight:700;font-size:13.5px;line-height:1.3;}
+  .est-meta{font-size:11.5px;color:var(--ink-soft);}
+  .est-preco{font-weight:800;font-size:15.5px;}
+  .est-preco.faixa{color:#B45309;font-size:13px;}
+  .est-barra{height:7px;border-radius:999px;background:#E9EEF3;overflow:hidden;display:flex;}
+  .est-barra i{display:block;height:100%;}
+  .est-legenda{display:flex;gap:9px;font-size:11.2px;color:var(--ink-soft);flex-wrap:wrap;}
+  .est-legenda b{color:var(--ink);font-weight:700;}
+  .est-cat{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;
+    margin:22px 0 12px;padding-bottom:7px;border-bottom:2px solid var(--line);}
+  .est-cat h3{margin:0;font-size:15px;}
+  .est-cat span{font-size:12.5px;color:var(--ink-soft);font-weight:600;}
+
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(255px,1fr));gap:16px;}
   .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:18px;display:flex;
     flex-direction:column;gap:10px;transition:.18s;position:relative;overflow:hidden;}
@@ -481,7 +507,13 @@
         <div class="form-card">
           <h2>Quanto tem de cada coisa <span id="estoqueResumo" style="font-size:12.5px;font-weight:600;color:var(--ink-soft);"></span></h2>
           <p>Os itens agrupados por modelo: monitor pelo tamanho da tela, computador pelo processador e memória, o resto pelo título. “Disponíveis” é o que ainda dá pra vender hoje. Quando o mesmo modelo está com preços diferentes, a linha mostra a faixa em laranja — quase sempre é item que passou batido numa alteração.</p>
-          <div class="search-box" style="max-width:320px;margin-bottom:14px;"><input type="text" id="estoqueBusca" placeholder="Buscar modelo ou categoria..." oninput="renderEstoque()"></div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px;">
+            <div class="search-box" style="max-width:320px;flex:1;"><input type="text" id="estoqueBusca" placeholder="Buscar modelo ou categoria..." oninput="renderEstoque()"></div>
+            <div class="chip-row" id="estoqueVisaoChips">
+              <button class="chip active" data-visao="fotos" onclick="mudarVisaoEstoque('fotos')">🖼️ Fotos</button>
+              <button class="chip" data-visao="lista" onclick="mudarVisaoEstoque('lista')">☰ Lista</button>
+            </div>
+          </div>
           <div id="estoqueLista"></div>
         </div>
       </div>
@@ -3275,9 +3307,16 @@ function resumirEstoque(){
   const grupos = new Map();
   effectiveCatalog.forEach(i => {
     const chave = `${i.categoria}||${grupoEstoque(i)}`;
-    if(!grupos.has(chave)) grupos.set(chave, { categoria: i.categoria || '—', grupo: grupoEstoque(i), disp:0, res:0, vend:0, total:0, precos: new Set() });
+    if(!grupos.has(chave)) grupos.set(chave, { categoria: i.categoria || '—', grupo: grupoEstoque(i), disp:0, res:0, vend:0, total:0, precos: new Set(), foto:null, fotoAlt:null });
     const g = grupos.get(chave);
     g.precos.add(Number(i.preco) || 0);
+    // a foto do card é a de uma unidade que ainda está à venda; se todas
+    // saíram, usa a de qualquer uma do mesmo modelo
+    if(i.fotoUrl){
+      const aVenda = i.isStock ? i.availableQty > 0 : i.disponivel;
+      if(aVenda && !g.foto) g.foto = i.fotoUrl;
+      if(!g.fotoAlt) g.fotoAlt = i.fotoUrl;
+    }
     if(i.isStock){
       const total = Number(i.estoque) || 0;
       const res = Number(i.reservedQty) || 0;
@@ -3293,6 +3332,47 @@ function resumirEstoque(){
   });
   return [...grupos.values()].sort((a,b) =>
     a.categoria.localeCompare(b.categoria,'pt-BR') || b.disp - a.disp || a.grupo.localeCompare(b.grupo,'pt-BR'));
+}
+
+let estoqueVisao = 'fotos';
+function mudarVisaoEstoque(v){
+  estoqueVisao = v;
+  document.querySelectorAll('#estoqueVisaoChips .chip').forEach(b=>b.classList.toggle('active', b.dataset.visao === v));
+  renderEstoque();
+}
+
+// Card do modelo: foto, preço e uma barra com a proporção disponível /
+// reservado / vendido — dá pra ver num relance o que está encalhado.
+function cardEstoque(g){
+  const precos = [...g.precos].sort((a,b)=>a-b);
+  const preco = precos.length > 1
+    ? `<div class="est-preco faixa" title="mesmo modelo com preços diferentes">${brl(precos[0])} – ${brl(precos[precos.length-1])}</div>`
+    : `<div class="est-preco">${brl(precos[0] || 0)}</div>`;
+  const pct = n => g.total ? (n / g.total * 100) : 0;
+  const foto = (g.foto || g.fotoAlt)
+    ? `<img src="${esc(g.foto || g.fotoAlt)}" alt="${esc(g.grupo)}" loading="lazy">`
+    : '<span class="sem">sem foto</span>';
+  return `<div class="est-card ${g.disp ? '' : 'esgotado'}">
+    <div class="est-foto">${foto}<span class="est-qtd ${g.disp ? '' : 'zero'}">${g.disp ? g.disp + ' disp.' : 'esgotado'}</span></div>
+    <div class="est-corpo">
+      <div class="est-modelo">${esc(g.grupo)}</div>
+      <div class="est-meta">${esc(g.categoria)}</div>
+      ${preco}
+      <div style="margin-top:auto;display:flex;flex-direction:column;gap:5px;padding-top:8px;">
+        <div class="est-barra" title="${g.disp} disponível(is), ${g.res} reservado(s), ${g.vend} vendido(s) de ${g.total}">
+          <i style="width:${pct(g.disp)}%;background:#1E7A4C;"></i>
+          <i style="width:${pct(g.res)}%;background:#E3A008;"></i>
+          <i style="width:${pct(g.vend)}%;background:#CBD5E1;"></i>
+        </div>
+        <div class="est-legenda">
+          <span><b>${g.disp}</b> disp.</span>
+          ${g.res ? `<span><b>${g.res}</b> res.</span>` : ''}
+          ${g.vend ? `<span><b>${g.vend}</b> vend.</span>` : ''}
+          <span>de ${g.total}</span>
+        </div>
+      </div>
+    </div>
+  </div>`;
 }
 
 function renderEstoque(){
@@ -3312,9 +3392,28 @@ function renderEstoque(){
     <div class="dp-stat"><div class="n">${soma(todos,'total')}</div><div class="l">Total no catálogo</div></div>`;
 
   const resumo = document.getElementById('estoqueResumo');
-  if(resumo) resumo.textContent = `· ${todos.length} modelo(s)${termo ? ` — ${grupos.length} na busca` : ''}`;
+  if(resumo) resumo.textContent = `· ${todos.length} ${todos.length === 1 ? 'modelo' : 'modelos'}${termo ? ` — ${grupos.length} na busca` : ''}`;
 
   if(!grupos.length){ lista.innerHTML = '<div class="empty">Nenhum modelo encontrado nessa busca.</div>'; return; }
+
+  if(estoqueVisao === 'fotos'){
+    let html = '';
+    let catAtual = null;
+    grupos.forEach(g => {
+      if(g.categoria !== catAtual){
+        if(catAtual !== null) html += '</div>';
+        catAtual = g.categoria;
+        const daCat = grupos.filter(x => x.categoria === catAtual);
+        const d = soma(daCat,'disp'), t = soma(daCat,'total'), m = daCat.length;
+        html += `<div class="est-cat"><h3>${esc(catAtual)}</h3>
+          <span>${d} ${d === 1 ? 'disponível' : 'disponíveis'} de ${t} · ${m} ${m === 1 ? 'modelo' : 'modelos'}</span></div><div class="est-grid">`;
+      }
+      html += cardEstoque(g);
+    });
+    if(catAtual !== null) html += '</div>';
+    lista.innerHTML = html;
+    return;
+  }
 
   let html = '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;min-width:560px;">';
   let catAtual = null;
