@@ -1947,6 +1947,29 @@ async function verComprovanteAdmin(protocolo){
   }
 }
 
+async function baixarComprovanteAdmin(protocolo, btnEl){
+  const original = btnEl.textContent;
+  btnEl.textContent = 'Buscando...';
+  btnEl.disabled = true;
+  try{
+    const res = await fetch('/api/comprovante?protocolo=' + encodeURIComponent(protocolo), { headers: adminHeaders() });
+    const data = await res.json();
+    if(!res.ok) throw new Error(data.error || 'Comprovante não encontrado.');
+    // o "&download" faz o Supabase devolver o arquivo como anexo, com o nome original
+    const a = document.createElement('a');
+    a.href = data.url + (data.url.includes('?') ? '&' : '?') + 'download';
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  } catch(err){
+    showToast(err.message || 'Não foi possível baixar o comprovante.');
+  } finally {
+    btnEl.textContent = original;
+    btnEl.disabled = false;
+  }
+}
+
 /* ============ ADMIN ============ */
 let adminUnlocked = false;
 async function checkAdminAccess(){
@@ -2476,6 +2499,8 @@ function desenharVendasLista(){
       ${c.pagamento==='Pix' ? `<div class="dp-actions" style="margin-top:8px;">
         <button class="btn btn-outline btn-sm" onclick="baixarNotaDebito('${c.protocolo}', this)">Baixar Nota de Débito</button>
         <button class="btn btn-outline btn-sm" onclick="regerarNotaDebito('${c.protocolo}', this)">Regerar ND</button>
+        ${c.temComprovante ? `<button class="btn btn-outline btn-sm" onclick="verComprovanteAdmin('${c.protocolo}')">Ver comprovante do Pix</button>
+        <button class="btn btn-outline btn-sm" onclick="baixarComprovanteAdmin('${c.protocolo}', this)">\u2b07\ufe0f Baixar comprovante</button>` : ''}
       </div>` : ''}
     </div>
   `).join('');
