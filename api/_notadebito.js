@@ -13,12 +13,17 @@ import { ND_TEMPLATE_BASE64 } from './_nd_template.js';
 // se encontra; dizer QUAL é o estado ("Antigo Desligando as Vezes") é o que
 // impede a discussão de "ninguém me avisou" depois da venda.
 //
-// Modelo suporta até 2 itens na tabela (linhas 13 e 14). Com mais que isso,
-// concatena os demais na descrição do 2º item pra não perder informação.
+// Uma linha por item. O modelo traz duas (13 e 14) e a folha ganha quantas
+// faltarem: com 4 itens, a tabela vai de 13 a 16 e tudo que está abaixo dela
+// — dados de pagamento, totais, aviso de garantia, assinaturas e fotos —
+// desce junto.
+//
+// Antes os itens do 2º em diante iam concatenados numa célula só, com o valor
+// somado. Na prática o texto estourava a célula e saia cortado na impressão, e
+// ninguém conseguia conferir preço por item — justamente o que a nota existe
+// para permitir.
+//
 // Item de estoque (SSD, cooler etc.) não tem patrimônio: sai só o nome.
-// Cada linha leva o seu valor (preço x quantidade); com 3+ itens, a 2ª linha
-// soma o valor dos demais. O total da ND é =SUM(C13:C14) no modelo, então
-// as duas linhas sempre fecham com o total do chamado.
 function montarItens(itensChamado, valorTotal) {
   const linhas = itensChamado.map((it) => {
     const prefixo = it.isStock ? '' : `Nº ${it.numero} — `;
@@ -32,15 +37,17 @@ function montarItens(itensChamado, valorTotal) {
     };
   });
   const total = Number(valorTotal) || 0;
-  if (linhas.length <= 1) return [{ texto: linhas[0] ? linhas[0].texto : '', valor: total }];
-  const primeira = linhas[0];
-  const restoTexto = linhas.slice(1).map((l) => l.texto).join('; ');
-  // se algum preço não veio, mantém o comportamento antigo: tudo na 1ª linha
-  const valorPrimeira = linhas.every((l) => l.valor !== null) ? Math.min(primeira.valor, total) : total;
-  return [
-    { texto: primeira.texto, valor: valorPrimeira },
-    { texto: restoTexto, valor: Math.max(0, total - valorPrimeira) },
-  ];
+  if (!linhas.length) return [{ texto: '', valor: total }];
+
+  // Rede de segurança: a nota nunca pode fechar com valor diferente do que foi
+  // cobrado. Se faltar preço em algum item, ou a soma não bater com o total do
+  // chamado, volta ao formato antigo — feio, porém correto no dinheiro.
+  const soma = linhas.reduce((a, l) => a + (l.valor || 0), 0);
+  const todosComPreco = linhas.every((l) => l.valor !== null);
+  if (!todosComPreco || Math.abs(soma - total) > 0.005) {
+    return [{ texto: linhas.map((l) => l.texto).join('; '), valor: total }];
+  }
+  return linhas;
 }
 
 // Vigência do preço impressa na nota, logo acima das assinaturas. Como o
@@ -122,14 +129,26 @@ export async function gerarNotaDebito({ protocolo, pagador, cpf, valorTotal, ite
   nd.getCell('D2').value = numero;
   nd.getCell('A9').value = `Pagador: ${pagadorComCpf}`;
   const linhasItens = montarItens(itens, valorTotal);
-  nd.getCell('A13').value = 1;
-  nd.getCell('B13').value = linhasItens[0].texto;
-  nd.getCell('C13').value = linhasItens[0].valor;
-  if (linhasItens[1]) {
-    nd.getCell('A14').value = 2;
-    nd.getCell('B14').value = linhasItens[1].texto;
-    nd.getCell('C14').value = linhasItens[1].valor; // total = SUM(C13:C14) no modelo
-  }
+
+  // O modelo já traz duas linhas de item (13 e 14). Faltando linhas,
+  // duplicateRow copia o estilo e as bordas da 14 e empurra o resto da folha
+  // pra baixo — inclusive as células mescladas, que o ExcelJS reposiciona ao
+  // gravar. `extras` é o deslocamento que todo o resto precisa respeitar.
+  const PRIMEIRA_LINHA_ITEM = 13;
+  const LINHAS_NO_MODELO = 2;
+  const extras = Math.max(0, linhasItens.length - LINHAS_NO_MODELO);
+  if (extras > 0) nd.duplicateRow(PRIMEIRA_LINHA_ITEM + LINHAS_NO_MODELO - 1, extras, true);
+
+  // depois do empurrão, o que estava na linha X do modelo está em X + extras
+  const abaixo = (linha) => linha + extras;
+  const ultimaLinhaItem = PRIMEIRA_LINHA_ITEM + linhasItens.length - 1;
+
+  linhasItens.forEach((linha, i) => {
+    const r = PRIMEIRA_LINHA_ITEM + i;
+    nd.getCell(`A${r}`).value = i + 1;
+    nd.getCell(`B${r}`).value = linha.texto;
+    nd.getCell(`C${r}`).value = linha.valor;
+  });
 
   // Datas: o modelo traz D5/D7 como fórmula (=PARAMETROS!B6/B7) com o
   // resultado ANTIGO em cache (31/08/2026). Quem abre num visualizador que
@@ -141,13 +160,16 @@ export async function gerarNotaDebito({ protocolo, pagador, cpf, valorTotal, ite
   // Totais: mantêm a fórmula, mas agora com o resultado já calculado. Sem
   // isso o arquivo carregava o total do modelo (R$ 200) em TODAS as notas.
   const totalItens = linhasItens.reduce((a, l) => a + (Number(l.valor) || 0), 0);
-  nd.getCell('C16').value = { formula: 'SUM(C13:C14)', result: totalItens };
-  nd.getCell('D16').value = { formula: 'SUM(D13:D14)', result: 0 };
-  nd.getCell('D17').value = { formula: 'C16+D16', result: totalItens };
-  nd.getCell('D23').value = { formula: 'D17-D19-D21', result: totalItens };
+  const de = PRIMEIRA_LINHA_ITEM;
+  const ate = ultimaLinhaItem;
+  nd.getCell(`C${abaixo(16)}`).value = { formula: `SUM(C${de}:C${ate})`, result: totalItens };
+  nd.getCell(`D${abaixo(16)}`).value = { formula: `SUM(D${de}:D${ate})`, result: 0 };
+  nd.getCell(`D${abaixo(17)}`).value = { formula: `C${abaixo(16)}+D${abaixo(16)}`, result: totalItens };
+  nd.getCell(`D${abaixo(23)}`).value = { formula: `D${abaixo(17)}-D${abaixo(19)}-D${abaixo(21)}`, result: totalItens };
 
   // descrições podem ser longas: quebra de linha + altura maior nas linhas de item
-  [13, 14].forEach((r) => {
+  linhasItens.forEach((_, i) => {
+    const r = PRIMEIRA_LINHA_ITEM + i;
     const cell = nd.getCell(`B${r}`);
     if (cell.value) {
       cell.alignment = Object.assign({}, cell.alignment, { wrapText: true, vertical: 'middle' });
@@ -157,8 +179,8 @@ export async function gerarNotaDebito({ protocolo, pagador, cpf, valorTotal, ite
 
   // Aviso de garantia + vigência do preço, entre os totais e a linha de
   // assinatura (A25:D25). Duas linhas na mesma célula: a de cima em destaque.
-  try { nd.mergeCells('A25:D25'); } catch { /* já mesclado */ }
-  const celulaVigencia = nd.getCell('A25');
+  try { nd.mergeCells(`A${abaixo(25)}:D${abaixo(25)}`); } catch { /* já mesclado */ }
+  const celulaVigencia = nd.getCell(`A${abaixo(25)}`);
   celulaVigencia.value = {
     richText: [
       { font: { name: 'Calibri', size: 10.5, bold: true, color: { argb: 'FF8F1D1D' } }, text: AVISO_GARANTIA },
@@ -166,15 +188,17 @@ export async function gerarNotaDebito({ protocolo, pagador, cpf, valorTotal, ite
     ],
   };
   celulaVigencia.alignment = { wrapText: true, vertical: 'top', horizontal: 'left' };
-  nd.getRow(25).height = 42;
+  nd.getRow(abaixo(25)).height = 42;
 
   // foto(s) do(s) item(ns) abaixo das assinaturas, pra conferência visual
   if (fotos && fotos.length) {
-    nd.getCell('A30').value = 'Foto do(s) item(ns):';
-    nd.getCell('A30').font = { bold: true };
+    // A âncora da imagem é por número de linha e não acompanha o empurrão
+    // sozinha: sem somar `extras`, a foto cai por cima do próprio rótulo.
+    nd.getCell(`A${abaixo(30)}`).value = 'Foto do(s) item(ns):';
+    nd.getCell(`A${abaixo(30)}`).font = { bold: true };
     fotos.slice(0, 2).forEach((f, idx) => {
       const imgId = wb.addImage({ buffer: f.buffer, extension: f.extension });
-      nd.addImage(imgId, { tl: { col: idx * 2, row: 30 }, ext: { width: 190, height: 140 } });
+      nd.addImage(imgId, { tl: { col: idx * 2, row: abaixo(30) }, ext: { width: 190, height: 140 } });
     });
   }
 
