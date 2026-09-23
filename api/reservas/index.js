@@ -187,7 +187,7 @@ export default async function handler(req, res) {
 
       const protocolos = chamados.map((c) => c.protocolo);
       let itensPorChamado = {};
-      let descricaoPorItemId = {};
+      let infoPorItemId = {};
       const ndPorChamado = {};
       if (protocolos.length) {
         // número da Nota de Débito de cada chamado — o Painel usa pra buscar
@@ -211,15 +211,15 @@ export default async function handler(req, res) {
         if (itemIds.length) {
           const { data: itemsData, error: itemsErr } = await supabase
             .from('items')
-            .select('id, descricao')
+            .select('id, descricao, condicao')
             .in('id', itemIds);
           if (itemsErr) throw itemsErr;
-          itemsData.forEach((it) => { descricaoPorItemId[it.id] = it.descricao; });
+          itemsData.forEach((it) => { infoPorItemId[it.id] = it; });
         }
       }
 
       const shaped = chamados.map((c) =>
-        shapeChamado(c, itensPorChamado[c.protocolo] || [], descricaoPorItemId, ndPorChamado[c.protocolo] || null)
+        shapeChamado(c, itensPorChamado[c.protocolo] || [], infoPorItemId, ndPorChamado[c.protocolo] || null)
       );
       return res.status(200).json({ chamados: shaped });
     }
@@ -493,6 +493,7 @@ export default async function handler(req, res) {
           numero: l.item.numero,
           titulo: l.item.titulo,
           descricao: l.item.descricao,
+          condicao: l.item.condicao || '',
           categoria: l.item.categoria,
           preco: l.item.preco,
           quantidade: l.qty,
@@ -519,7 +520,7 @@ function parseBody(req) {
   return req.body || {};
 }
 
-function shapeChamado(c, itens, descricaoPorItemId = {}, notaDebito = null) {
+function shapeChamado(c, itens, infoPorItemId = {}, notaDebito = null) {
   return {
     protocolo: c.protocolo,
     notaDebito,
@@ -543,7 +544,10 @@ function shapeChamado(c, itens, descricaoPorItemId = {}, notaDebito = null) {
       itemId: it.item_id,
       numero: it.numero,
       titulo: it.titulo,
-      descricao: descricaoPorItemId[it.item_id] || '',
+      descricao: (infoPorItemId[it.item_id] || {}).descricao || '',
+      // Sai no resumo que o comprador baixa. Descrição e condição vêm do item, e
+      // não de chamado_itens, porque aquela tabela não guarda nenhum dos dois.
+      condicao: (infoPorItemId[it.item_id] || {}).condicao || '',
       categoria: it.categoria,
       preco: Number(it.preco),
       quantidade: it.quantidade,
