@@ -23,7 +23,7 @@ async function montarDadosNd(supabase, itens) {
   const ids = [...new Set(itens.map((it) => it.item_id).filter(Boolean))];
   const infoPorId = {};
   if (ids.length) {
-    const { data: itemRows } = await supabase.from('items').select('id, descricao, foto_url').in('id', ids);
+    const { data: itemRows } = await supabase.from('items').select('id, descricao, foto_url, condicao').in('id', ids);
     (itemRows || []).forEach((r) => { infoPorId[r.id] = r; });
   }
   const itensNd = itens.map((it) => {
@@ -35,6 +35,11 @@ async function montarDadosNd(supabase, itens) {
       isStock: !!it.is_stock,
       preco: it.preco,
       descricao: info.descricao && info.descricao !== '—' ? info.descricao : '',
+      // A condição vem do item, não de chamado_itens: a tabela do chamado não
+      // guarda esse campo. Na prática sai a condição de hoje, que é a mesma que
+      // estava na vitrine — e serve também para as NDs antigas, que passam a
+      // imprimir o defeito quando forem regeradas.
+      condicao: info.condicao && info.condicao !== '—' ? info.condicao : '',
     };
   });
   const fotos = [];

@@ -8,6 +8,11 @@
 import ExcelJS from 'exceljs';
 import { ND_TEMPLATE_BASE64 } from './_nd_template.js';
 
+// A condição sai na linha do item porque a ND é o documento que o comprador
+// assina. A nota já diz que o produto não tem garantia e vai no estado em que
+// se encontra; dizer QUAL é o estado ("Antigo Desligando as Vezes") é o que
+// impede a discussão de "ninguém me avisou" depois da venda.
+//
 // Modelo suporta até 2 itens na tabela (linhas 13 e 14). Com mais que isso,
 // concatena os demais na descrição do 2º item pra não perder informação.
 // Item de estoque (SSD, cooler etc.) não tem patrimônio: sai só o nome.
@@ -18,10 +23,11 @@ function montarItens(itensChamado, valorTotal) {
   const linhas = itensChamado.map((it) => {
     const prefixo = it.isStock ? '' : `Nº ${it.numero} — `;
     const desc = it.descricao ? ` — ${it.descricao}` : '';
+    const cond = it.condicao ? ` — Condição: ${it.condicao}` : '';
     const qtd = Number(it.quantidade) || 1;
     const valorUnit = Number(it.preco);
     return {
-      texto: `${prefixo}${it.titulo}${desc}${qtd > 1 ? ` (${qtd}x)` : ''}`,
+      texto: `${prefixo}${it.titulo}${desc}${cond}${qtd > 1 ? ` (${qtd}x)` : ''}`,
       valor: Number.isFinite(valorUnit) ? valorUnit * qtd : null,
     };
   });
