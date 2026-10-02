@@ -891,11 +891,11 @@ if(!STAFF_MODE){
 }
 
 /* ============ PAGAMENTO ============ */
-// Mesma chave que consta na Nota de Débito (CNPJ da filial 0002-89)
-const CHAVE_PIX = '05.949.989/0002-89';
+// Chave Pix aleatória (EVP) que recebe os pagamentos do catálogo
+const CHAVE_PIX = '021c0481-3057-4c01-9359-da8a9d627525';
 
 function copiarChavePix(btn){
-  const digitos = CHAVE_PIX.replace(/\D/g,'');
+  const digitos = CHAVE_PIX;
   const done = () => {
     showToast('Chave Pix copiada! ✓');
     if(btn){ const orig = btn.textContent; btn.textContent = 'Copiada ✓'; setTimeout(()=>{ btn.textContent = orig; }, 2000); }
@@ -1419,7 +1419,7 @@ function renderPagamento(){
       </div>
       <div class="sim-box sim-ok" style="margin-bottom:12px;">
         <b>1. Pague agora via Pix</b><br>
-        Chave (CNPJ): <b class="mono">${CHAVE_PIX}</b>
+        Chave Pix (aleatória): <b class="mono">${CHAVE_PIX}</b>
         <button class="btn btn-outline btn-sm" style="margin-left:6px;" onclick="copiarChavePix(this)">Copiar chave</button><br>
         Valor: <b>${brl(total)}</b>
       </div>
@@ -1784,7 +1784,7 @@ async function renderMeusChamados(){
         <div class="meta">${esc(c.pagamento)}${c.parcelas ? ' · '+c.parcelas+'x de '+brl(c.valorParcela) : ''} · ${new Date(c.dataAbertura).toLocaleDateString('pt-BR')}</div>
         <div class="items-list">${c.itens.map(it=>`Nº ${esc(it.numero)} — ${esc(it.titulo)} (${it.quantidade}x)`).join(' · ')}</div>
         <div style="margin-top:8px;" class="val">Total: ${brl(c.valorTotal)}</div>
-        ${c.status==='Aguardando pagamento Pix' ? `<div style="margin-top:8px;font-size:12px;color:var(--ink-soft);">Falta o comprovante do Pix nesta reserva. Chave (CNPJ): <b class="mono">${CHAVE_PIX}</b> · Valor: <b>${brl(c.valorTotal)}</b></div>
+        ${c.status==='Aguardando pagamento Pix' ? `<div style="margin-top:8px;font-size:12px;color:var(--ink-soft);">Falta o comprovante do Pix nesta reserva. Chave Pix (aleatória): <b class="mono">${CHAVE_PIX}</b> · Valor: <b>${brl(c.valorTotal)}</b></div>
         <div style="margin-top:6px;font-size:12.5px;font-weight:700;color:var(--danger);">⏳ Tempo restante da reserva: <span class="tempo-reserva" data-abertura="${c.dataAbertura}">${tempoRestanteReserva(c.dataAbertura)}</span> — anexe o comprovante antes de expirar.</div>
         <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">
           <button class="btn btn-primary btn-sm" onclick="document.getElementById('cmp-${c.protocolo}').click()">📎 Anexar comprovante do Pix</button>
